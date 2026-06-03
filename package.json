@@ -6,6 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "scrape": "tsx src/cli/scrape-company.ts",
+    "ingest": "tsx src/cli/ingest.ts",
+    "extract": "tsx src/cli/extract.ts",
     "pdf-text": "tsx src/cli/pdf-text.ts",
     "db": "tsx src/cli/db.ts",
     "verify": "tsx src/cli/verify.ts"
