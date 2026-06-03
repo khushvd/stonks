@@ -5,15 +5,16 @@ export function insertFiling(
   db: Database.Database,
   f: { company_id: number; type: FilingType; period: string | null; source_url: string | null; local_path: string | null },
 ): number {
-  const info = db.prepare(
-    `INSERT OR IGNORE INTO filings (company_id, type, period, source_url, local_path)
-     VALUES (@company_id, @type, @period, @source_url, @local_path)`,
-  ).run(f);
-  if (info.changes > 0) return Number(info.lastInsertRowid);
-  return (db.prepare(
+  const existing = db.prepare(
     `SELECT id FROM filings WHERE company_id=@company_id AND type=@type
      AND IFNULL(period,'')=IFNULL(@period,'') AND IFNULL(source_url,'')=IFNULL(@source_url,'')`,
-  ).get(f) as { id: number }).id;
+  ).get(f) as { id: number } | undefined;
+  if (existing) return existing.id;
+  const info = db.prepare(
+    `INSERT INTO filings (company_id, type, period, source_url, local_path)
+     VALUES (@company_id, @type, @period, @source_url, @local_path)`,
+  ).run(f);
+  return Number(info.lastInsertRowid);
 }
 
 export function listFilings(db: Database.Database, companyId: number): Filing[] {

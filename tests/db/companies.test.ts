@@ -23,4 +23,13 @@ describe("companies + filings", () => {
     expect(filings).toHaveLength(1);
     expect(filings[0].type).toBe("presentation");
   });
+
+  it("insertFiling is idempotent even with null period and source_url", () => {
+    const db = openDb(":memory:");
+    const companyId = upsertCompany(db, { name: "X", ticker: null, industry: null });
+    const a = insertFiling(db, { company_id: companyId, type: "result", period: null, source_url: null, local_path: "p" });
+    const b = insertFiling(db, { company_id: companyId, type: "result", period: null, source_url: null, local_path: "p" });
+    expect(a).toBe(b);
+    expect(listFilings(db, companyId)).toHaveLength(1);
+  });
 });

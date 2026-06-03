@@ -5,11 +5,12 @@ export function upsertCompany(
   db: Database.Database,
   c: { name: string; ticker: string | null; industry: string | null },
 ): number {
-  db.prepare(
+  const row = db.prepare(
     `INSERT INTO companies (name, ticker, industry) VALUES (@name, @ticker, @industry)
-     ON CONFLICT(name) DO UPDATE SET ticker=excluded.ticker, industry=excluded.industry`,
-  ).run(c);
-  return (db.prepare("SELECT id FROM companies WHERE name = ?").get(c.name) as { id: number }).id;
+     ON CONFLICT(name) DO UPDATE SET ticker=excluded.ticker, industry=excluded.industry
+     RETURNING id`,
+  ).get(c) as { id: number };
+  return row.id;
 }
 
 export function getCompany(db: Database.Database, name: string): Company | undefined {
