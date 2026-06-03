@@ -17,6 +17,15 @@ export interface NbReference {
   cited_text: string;
 }
 
+// Untrusted positionals (company titles, file paths, free-text questions) must not begin with
+// "-", or the notebooklm CLI would parse them as flags (argv flag-smuggling). execFile already
+// blocks shell injection; this closes the remaining flag-injection vector. None of our real
+// inputs legitimately start with "-".
+function positional(value: string, label: string): string {
+  if (/^-/.test(value)) throw new Error(`Refusing unsafe ${label} starting with "-": ${value}`);
+  return value;
+}
+
 async function runRaw(run: Runner, args: string[]): Promise<string> {
   try {
     const { stdout } = await run(BIN, args);
@@ -45,7 +54,7 @@ export async function nbList(
 }
 
 export async function nbCreate(title: string, run: Runner = defaultRun): Promise<{ id: string }> {
-  const res = await runJson<{ notebook: { id: string } }>(run, ["create", title, "--json"]);
+  const res = await runJson<{ notebook: { id: string } }>(run, ["create", positional(title, "title"), "--json"]);
   return { id: res.notebook.id };
 }
 
@@ -57,7 +66,7 @@ export async function nbSourceAdd(
   // --type file is REQUIRED for PDFs.
   const res = await runJson<{ source: { id: string; title: string } }>(
     run,
-    ["source", "add", filePath, "--type", "file", "-n", notebookId, "--json"],
+    ["source", "add", positional(filePath, "file path"), "--type", "file", "-n", notebookId, "--json"],
   );
   return { id: res.source.id, title: res.source.title };
 }
@@ -74,7 +83,7 @@ export async function nbAsk(
 ): Promise<{ answer: string; references: NbReference[] }> {
   const res = await runJson<{ answer?: string; references?: NbReference[] }>(
     run,
-    ["ask", question, "-n", notebookId, "--json"],
+    ["ask", positional(question, "question"), "-n", notebookId, "--json"],
   );
   return { answer: res.answer ?? "", references: Array.isArray(res.references) ? res.references : [] };
 }

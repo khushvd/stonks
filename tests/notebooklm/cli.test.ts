@@ -47,4 +47,13 @@ describe("notebooklm cli wrapper", () => {
   it("throws on unparseable output", async () => {
     await expect(nbList(ok("not json at all"))).rejects.toThrow(/unparseable/i);
   });
+
+  it("refuses untrusted positionals that begin with '-' (argv flag-smuggling)", async () => {
+    const neverRun: Runner = async () => {
+      throw new Error("runner should not be reached for an unsafe positional");
+    };
+    await expect(nbCreate("--help", neverRun)).rejects.toThrow(/unsafe title/i);
+    await expect(nbSourceAdd("nb1", "-rf /", neverRun)).rejects.toThrow(/unsafe file path/i);
+    await expect(nbAsk("nb1", "--json=evil", neverRun)).rejects.toThrow(/unsafe question/i);
+  });
 });
