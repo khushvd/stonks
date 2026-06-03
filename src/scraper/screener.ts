@@ -37,27 +37,39 @@ async function downloadPdf(url: string, destPath: string): Promise<void> {
   await pipeline(Readable.fromWeb(res.body as any), createWriteStream(destPath));
 }
 
-// Keep only the first `perType` links of each type (page lists newest first),
-// so a Phase-1 run downloads a handful of PDFs, not the full history.
-function capPerType(links: FilingLink[], perType: number): FilingLink[] {
+// Keep only the first `perType` links of each kept type (page lists newest first),
+// so a run downloads the latest handful, not the full history.
+function capPerType(links: FilingLink[], perType: number, keep: Set<FilingType>): FilingLink[] {
   const counts: Record<FilingType, number> = { presentation: 0, result: 0, annual_report: 0 };
-  return links.filter((l) => (counts[l.type]++ < perType));
+  return links.filter((l) => keep.has(l.type) && counts[l.type]++ < perType);
+}
+
+export interface ScrapeOptions {
+  perType?: number;
+  // Annual reports are huge (200-300pp) and impractical to parse wholesale,
+  // so they're excluded unless explicitly requested.
+  includeAnnualReports?: boolean;
 }
 
 export interface ScrapeResult {
   links: (FilingLink & { local_path: string })[];
 }
 
-// Scrapes one company by ticker slug, downloads up to `perType` filing PDFs of
-// each type into data/<ticker>/. Failed downloads are skipped with a warning.
-export async function scrapeCompany(ticker: string, perType = 2): Promise<ScrapeResult> {
+// Scrapes one company by ticker slug, downloads up to `perType` PDFs of each kept
+// type into data/<ticker>/. Defaults to presentations + results only.
+// Failed downloads are skipped with a warning.
+export async function scrapeCompany(ticker: string, opts: ScrapeOptions = {}): Promise<ScrapeResult> {
+  const perType = opts.perType ?? 2;
+  const keep = new Set<FilingType>(
+    opts.includeAnnualReports ? ["presentation", "result", "annual_report"] : ["presentation", "result"],
+  );
   let browser: Browser | undefined;
   try {
     browser = await chromium.launch();
     const page = await browser.newPage();
     await login(page);
     const html = await fetchCompanyHtml(page, ticker);
-    const links = capPerType(parseFilingLinks(html), perType);
+    const links = capPerType(parseFilingLinks(html), perType, keep);
     const dir = join(dataDir(), ticker);
     await mkdir(dir, { recursive: true });
     const out: ScrapeResult["links"] = [];
