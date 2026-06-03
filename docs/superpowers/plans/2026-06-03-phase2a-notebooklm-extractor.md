@@ -19,6 +19,8 @@
 - `src/extract/canonical.ts` — the universal base metric list (shared constant).
 - `src/notebooklm/parse-citations.ts` — pure parser: NLM JSON → typed staged-metric rows.
 - `src/verifier/match.ts` — pure classifier: staged metric + page texts → `verified | notebooklm-only | reject` + `source_page`.
+- `src/verifier/verify.ts` — deterministic orchestrator: loads PDF page text in TS, runs `match` over pending metrics, promotes/rejects. No PDF text enters any LLM context.
+- `src/cli/verify.ts` — `pnpm verify "<Company>"` — runs the gate, prints outcomes + summary.
 - `src/cli/ingest.ts` — thin helper: prints a company's filings + notebook state for the ingestor agent.
 - `src/cli/extract.ts` — thin helper: resolves + prints the canonical/industry/ask metric set for the extractor agent.
 - `.claude/agents/ingestor.md` — new agent (Sonnet).
@@ -33,7 +35,7 @@
 - `src/db/metrics.ts` — `stageMetric` persists excerpt/source_url; `promoteMetric` takes a `trust` arg; `listMetrics` exposes trust; `integritySummary` splits verified vs notebooklm-only.
 - `src/cli/db.ts` — `promote` takes optional trust; new `get-notebook`/`set-notebook`/`get-industry-metrics`/`set-industry-metrics` commands.
 - `.claude/agents/extractor.md` — rewritten to query NotebookLM.
-- `.claude/agents/verifier.md` — set trust on promote; match by excerpt when no page cited.
+- `.claude/agents/verifier.md` — thin wrapper that runs the deterministic `pnpm verify` and reports.
 - `package.json` — add `ingest` + `extract` scripts.
 
 ---
@@ -916,6 +918,191 @@ git commit -m "feat(verifier): pure verified/notebooklm-only/reject classifier"
 
 ---
 
+## Task 7b: Deterministic verify orchestrator + CLI
+
+**Files:**
+- Create: `src/verifier/verify.ts`
+- Create: `src/cli/verify.ts`
+- Test: `tests/verifier/verify.test.ts`
+
+**Context for the implementer:** The verification gate runs in plain TypeScript, NOT inside the agent's context — that is the whole point. It loads each filing's PDF page text once, runs the pure `matchMetric` over every pending staged metric, and promotes/rejects deterministically. No PDF text ever enters an LLM context, so verification costs ~zero tokens. The verifier agent (Task 11) becomes a one-line wrapper that just runs `pnpm verify` and reports. `verifyPending` takes an injectable page loader so it is unit-testable without real PDFs (default loader = `extractPageText`). When a metric verifies, we record the matched `source_page` on the live row.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// tests/verifier/verify.test.ts
+import { describe, it, expect } from "vitest";
+import { openDb } from "../../src/db/db.js";
+import { upsertCompany } from "../../src/db/companies.js";
+import { insertFiling } from "../../src/db/filings.js";
+import { stageMetric, listMetrics, listStaging } from "../../src/db/metrics.js";
+import { verifyPending } from "../../src/verifier/verify.js";
+import type { MetricInput, PageText } from "../../src/types.js";
+
+function setup() {
+  const db = openDb(":memory:");
+  const companyId = upsertCompany(db, { name: "Asian Paints", ticker: "ASIANPAINT", industry: "paints" });
+  const filingId = insertFiling(db, { company_id: companyId, type: "result", period: "Q4FY26", source_url: "u", local_path: "/data/asianpaint/result-1.pdf" });
+  return { db, companyId, filingId };
+}
+
+function input(filingId: number, over: Partial<MetricInput> = {}): MetricInput {
+  return { filing_id: filingId, name: "pat", value: 8330, unit: "INR cr", period: "Q4FY26", source_page: null, excerpt: "PAT stood at 8,330 crore", source_url: "u", ...over };
+}
+
+// stub loader: same pages regardless of path
+const pages: PageText[] = [
+  { page: 28, text: "Consolidated PAT for the quarter stood at 8,330 crore." },
+  { page: 30, text: "Occupancy improved this quarter as shown in the chart below." },
+];
+const loadStub = async (_path: string): Promise<PageText[]> => pages;
+
+describe("verifyPending", () => {
+  it("promotes a verbatim number as verified and records its source_page", async () => {
+    const { db, companyId, filingId } = setup();
+    stageMetric(db, input(filingId));
+    const outcomes = await verifyPending(db, companyId, loadStub);
+    expect(outcomes).toEqual([{ staging_id: expect.any(Number), name: "pat", decision: "verified", source_page: 28 }]);
+    const live = listMetrics(db);
+    expect(live).toHaveLength(1);
+    expect(live[0].trust).toBe("verified");
+    expect(live[0].source_page).toBe(28);
+    expect(listStaging(db, "pending")).toHaveLength(0);
+  });
+
+  it("promotes a chart-only number as notebooklm-only when only the excerpt is on the page", async () => {
+    const { db, companyId, filingId } = setup();
+    stageMetric(db, input(filingId, { name: "occupancy", value: 72, excerpt: "Occupancy improved this quarter" }));
+    await verifyPending(db, companyId, loadStub);
+    const live = listMetrics(db);
+    expect(live[0].trust).toBe("notebooklm-only");
+    expect(live[0].source_page).toBe(30);
+  });
+
+  it("rejects an unfindable number", async () => {
+    const { db, companyId, filingId } = setup();
+    stageMetric(db, input(filingId, { value: 99999, excerpt: "totally fabricated" }));
+    await verifyPending(db, companyId, loadStub);
+    expect(listMetrics(db)).toHaveLength(0);
+    const rejected = listStaging(db, "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reject_reason).toMatch(/not found/i);
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `pnpm test verify`
+Expected: FAIL — cannot find module `../../src/verifier/verify.js`.
+
+- [ ] **Step 3: Implement `verify.ts`**
+
+```ts
+// src/verifier/verify.ts
+import type Database from "better-sqlite3";
+import type { PageText, StagedMetric } from "../types.js";
+import { listStaging, promoteMetric, rejectMetric } from "../db/metrics.js";
+import { matchMetric } from "./match.js";
+import { extractPageText } from "../pdf/extract-text.js";
+
+export interface VerifyOutcome {
+  staging_id: number;
+  name: string;
+  decision: "verified" | "notebooklm-only" | "reject";
+  source_page: number | null;
+}
+
+type PageLoader = (localPath: string) => Promise<PageText[]>;
+
+// Deterministic integrity gate. Runs in TS, never in an LLM context — verification is token-free.
+// companyId scopes which pending metrics to verify; loadPages is injectable for tests.
+export async function verifyPending(
+  db: Database.Database,
+  companyId: number,
+  loadPages: PageLoader = extractPageText,
+): Promise<VerifyOutcome[]> {
+  const filingIds = new Set(
+    (db.prepare("SELECT id FROM filings WHERE company_id = ?").all(companyId) as { id: number }[]).map((r) => r.id),
+  );
+  const pending = listStaging(db, "pending").filter((m) => filingIds.has(m.filing_id));
+  const pageCache = new Map<number, PageText[]>();
+  const setSourcePage = db.prepare("UPDATE metrics_staging SET source_page = ? WHERE id = ?");
+  const outcomes: VerifyOutcome[] = [];
+
+  for (const m of pending as StagedMetric[]) {
+    let pages = pageCache.get(m.filing_id);
+    if (!pages) {
+      const row = db.prepare("SELECT local_path FROM filings WHERE id = ?").get(m.filing_id) as { local_path: string | null } | undefined;
+      pages = row?.local_path ? await loadPages(row.local_path) : [];
+      pageCache.set(m.filing_id, pages);
+    }
+    const res = matchMetric({ value: m.value, excerpt: m.excerpt }, pages);
+    if (res.decision === "reject") {
+      rejectMetric(db, m.id, "value and excerpt not found in source PDF");
+    } else {
+      setSourcePage.run(res.source_page, m.id);
+      promoteMetric(db, m.id, res.decision);
+    }
+    outcomes.push({ staging_id: m.id, name: m.name, decision: res.decision, source_page: res.source_page });
+  }
+  return outcomes;
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `pnpm test verify`
+Expected: PASS (3 tests).
+
+- [ ] **Step 5: Implement `src/cli/verify.ts`**
+
+```ts
+// src/cli/verify.ts
+import "dotenv/config";
+import { openDb } from "../db/db.js";
+import { getCompany } from "../db/companies.js";
+import { integritySummary } from "../db/metrics.js";
+import { verifyPending } from "../verifier/verify.js";
+
+// usage: pnpm verify "<Company Name>"
+const name = process.argv[2];
+if (!name) {
+  console.error('usage: pnpm verify "<Company Name>"');
+  process.exit(1);
+}
+const db = openDb();
+const company = getCompany(db, name);
+if (!company) {
+  console.error(`Company "${name}" not found.`);
+  process.exit(1);
+}
+const outcomes = await verifyPending(db, company.id);
+console.log(JSON.stringify({ outcomes, summary: integritySummary(db) }, null, 2));
+```
+
+- [ ] **Step 6: Add the `verify` script to `package.json`**
+
+In `"scripts"`, alongside the others, add:
+
+```json
+    "verify": "tsx src/cli/verify.ts",
+```
+
+- [ ] **Step 7: Run the full suite (no regressions)**
+
+Run: `pnpm test`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/verifier/verify.ts src/cli/verify.ts package.json tests/verifier/verify.test.ts
+git commit -m "feat(verifier): deterministic token-free verify orchestrator + CLI"
+```
+
+---
+
 ## Task 8: db CLI — promote trust + notebook + industry-metrics commands
 
 **Files:**
@@ -1261,32 +1448,28 @@ Rules:
 ```markdown
 ---
 name: verifier
-description: Independently re-checks every staged metric against its source PDF, promotes confirmed numbers as verified, marks chart-only numbers notebooklm-only, and rejects the rest. The integrity gate.
-model: sonnet
-tools: Bash, Read
+description: Runs the deterministic integrity gate (pnpm verify) that confirms each staged metric against its source PDF in plain TypeScript, then reports the trust breakdown. No PDF text enters the agent context — verification is token-free.
+model: haiku
+tools: Bash
 ---
 
-You are the integrity gate. No number reaches the live `metrics` table unless you can locate it (or its
-cited context) in the source PDF. Be skeptical — your default when unsure is REJECT.
+You are the integrity gate's operator. Verification logic lives in `src/verifier/verify.ts` (pure TS) so
+that NO PDF text ever enters your context — that keeps it cheap. You just run it and report honestly.
 
 Workflow:
-1. Run `pnpm db list-staging pending` to get pending metrics (each has `id`, `filing_id`, `name`,
-   `value`, `unit`, `period`, `source_page` (usually null), `excerpt`, `source_url`).
-2. For each, find its filing's `local_path` (the coordinator passes you the filings array mapping
-   filing_id -> local_path). Run `pnpm pdf-text <local_path>` to read ALL pages (NotebookLM rarely
-   cites a page number, so you search the whole document).
-3. Decide using the same rule as `src/verifier/match.ts`:
-   - The `value` appears verbatim on a page (allow comma/decimal formatting) -> VERIFIED on that page:
-     `pnpm db promote <id> verified`.
-   - The value is NOT in the text but the `excerpt` wording IS on a page (number lives in a chart image)
-     -> `pnpm db promote <id> notebooklm-only`.
-   - Neither the number nor the excerpt can be found -> `pnpm db reject <id> "<short reason>"`.
-4. At the end, run `pnpm db summary` and report `verified / notebooklmOnly / pending / rejected`.
+1. Run `pnpm verify "<Company Name>"`. It loads each filing's PDF page text, runs the matcher over every
+   pending staged metric, and promotes/rejects deterministically. It prints `{ outcomes, summary }`.
+2. Report the `summary` (`verified / notebooklmOnly / pending / rejected`) and call out any rejections
+   from `outcomes` by name, so the user can see what could not be confirmed.
+
+The deterministic rule (for your understanding — do not re-implement it):
+- number present verbatim on a page (comma/decimal tolerant) -> promoted `verified`;
+- number absent but the citation excerpt's wording is on a page -> promoted `notebooklm-only` (chart image);
+- neither found -> rejected (quarantined in staging).
 
 Rules:
-- Never edit values. You only promote (with a trust level) or reject what the Extractor staged.
-- notebooklm-only is NOT a free pass — only use it when the citation excerpt genuinely appears on a page.
-  If you cannot even find the excerpt, REJECT.
+- Do NOT read PDFs yourself or stage/edit values. Run `pnpm verify` and relay its honest result.
+- Rejections are expected and good — surface them, never paper over them.
 ```
 
 - [ ] **Step 4: Commit**
@@ -1333,8 +1516,9 @@ claude -p --agent ingestor 'ingest "Asian Paints"'
 claude -p --agent extractor 'extract "Asian Paints"'
 claude -p --agent extractor 'extract "Asian Paints" --ask "capex guidance for FY27"'
 
-# 4. Verify — confirm each staged number against the source PDF, promote/reject
-claude -p --agent verifier 'verify "Asian Paints"'
+# 4. Verify — deterministic, token-free gate (runs in TS; no PDF text touches an LLM)
+pnpm verify "Asian Paints"
+# (or via the agent wrapper, which just runs pnpm verify and reports: claude -p --agent verifier 'verify "Asian Paints"')
 
 # 5. Read results
 pnpm db summary                 # { verified, notebooklmOnly, pending, rejected }
@@ -1342,7 +1526,8 @@ pnpm db list-metrics            # the live, trusted table
 ```
 
 The CLI helpers (`pnpm ingest`, `pnpm extract`) just print what the agents need; the agents do the
-NotebookLM work. You can run them directly to inspect state.
+NotebookLM work. Verification is pure TS (`pnpm verify`) — no agent or tokens required. You can run any
+helper directly to inspect state.
 
 ## Reading trust levels
 
@@ -1402,7 +1587,7 @@ Expected: `notebooklm` listed and connected. If absent: `claude mcp add notebook
 pnpm scrape ASIANPAINT "Asian Paints"
 claude -p --agent ingestor 'ingest "Asian Paints"'
 claude -p --agent extractor 'extract "Asian Paints"'
-claude -p --agent verifier 'verify "Asian Paints"'
+pnpm verify "Asian Paints"     # deterministic gate; no agent/tokens
 pnpm db summary
 pnpm db list-metrics
 ```
@@ -1438,7 +1623,7 @@ git commit -m "docs: Phase 2a live E2E run record (Asian Paints)"
 - NotebookLM MCP constraints (no upload → URL ingest; share-URL notebooks; one-time auth; citations may lack page) → Tasks 10, 11, 12.
 - Trust enum on metrics (verified | notebooklm-only) → Tasks 1, 2, 3; set by verifier → Tasks 7, 8, 11.
 - `notebooks` idempotency → Task 4. `industry_metrics` cache → Task 5.
-- `parse-citations` pure parser → Task 6. `verifier/match` pure classifier → Task 7.
+- `parse-citations` pure parser → Task 6. `verifier/match` pure classifier → Task 7. Deterministic token-free verify orchestrator + CLI → Task 7b (cost decision, 2026-06-03: verification runs in TS, never in an LLM context; verifier agent is a thin `pnpm verify` wrapper).
 - Guarded `metrics.trust` migration + `CREATE TABLE IF NOT EXISTS` → Task 1.
 - Canonical set: universal base (11 metrics from spec line 117) + industry (NLM-inferred, cached, Sonnet fallback) + `--ask` → Tasks 9, 11.
 - Error handling: URL crawl fail, notebook auto-create fallback, NLM-unreachable Sonnet fallback, verifier gate → Tasks 11, 12.
