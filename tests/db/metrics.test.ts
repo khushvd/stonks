@@ -65,4 +65,13 @@ describe("metrics staging and promotion", () => {
     const { db } = setup();
     expect(() => promoteMetric(db, 999)).toThrow();
   });
+
+  it("persists notebooklm_source_id on the staging row and defaults it to null", () => {
+    const { db, filingId } = setup();
+    stageMetric(db, input(filingId, { notebooklm_source_id: "src-A" }));
+    stageMetric(db, input(filingId, { name: "pat" })); // omit the field entirely
+    const staged = listStaging(db, "pending");
+    expect(staged[0].notebooklm_source_id).toBe("src-A");
+    expect(staged[1].notebooklm_source_id).toBeNull();
+  });
 });

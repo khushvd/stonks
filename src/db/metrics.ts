@@ -2,10 +2,12 @@ import type Database from "better-sqlite3";
 import type { Metric, MetricInput, StagedMetric, IntegritySummary, Trust } from "../types.js";
 
 export function stageMetric(db: Database.Database, m: MetricInput): number {
+  // Default the optional field so better-sqlite3 never sees a missing named param.
+  const row = { notebooklm_source_id: null, ...m };
   const info = db.prepare(
-    `INSERT INTO metrics_staging (filing_id, name, value, unit, period, source_page, excerpt, source_url, status)
-     VALUES (@filing_id, @name, @value, @unit, @period, @source_page, @excerpt, @source_url, 'pending')`,
-  ).run(m);
+    `INSERT INTO metrics_staging (filing_id, name, value, unit, period, source_page, excerpt, source_url, notebooklm_source_id, status)
+     VALUES (@filing_id, @name, @value, @unit, @period, @source_page, @excerpt, @source_url, @notebooklm_source_id, 'pending')`,
+  ).run(row);
   return Number(info.lastInsertRowid);
 }
 

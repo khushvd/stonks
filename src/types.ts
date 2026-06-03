@@ -34,6 +34,7 @@ export interface MetricInput {
   source_page: number | null;
   excerpt: string | null;
   source_url: string | null;
+  notebooklm_source_id?: string | null;
 }
 
 export interface Metric {
