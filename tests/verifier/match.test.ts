@@ -33,4 +33,34 @@ describe("matchMetric", () => {
     const r = matchMetric({ value: 12345, excerpt: null }, pages);
     expect(r).toEqual({ decision: "reject", source_page: null });
   });
+
+  it("does NOT verify an integer against a longer decimal (18 vs 18.5)", () => {
+    const r = matchMetric({ value: 18, excerpt: null }, [{ page: 5, text: "EBITDA margin 18.5%" }]);
+    expect(r).toEqual({ decision: "reject", source_page: null });
+  });
+
+  it("does NOT verify a value that is only a substring of a larger number (330 vs 8,330)", () => {
+    const r = matchMetric({ value: 330, excerpt: null }, [{ page: 5, text: "PAT 8,330 crore" }]);
+    expect(r).toEqual({ decision: "reject", source_page: null });
+  });
+
+  it("does NOT verify 5 against 5,000", () => {
+    const r = matchMetric({ value: 5, excerpt: null }, [{ page: 5, text: "Revenue 5,000 cr" }]);
+    expect(r).toEqual({ decision: "reject", source_page: null });
+  });
+
+  it("does NOT verify a negative value against the positive number (-150 vs 150)", () => {
+    const r = matchMetric({ value: -150, excerpt: null }, [{ page: 5, text: "profit of 150 cr" }]);
+    expect(r).toEqual({ decision: "reject", source_page: null });
+  });
+
+  it("verifies a decimal value present verbatim (18.5)", () => {
+    const r = matchMetric({ value: 18.5, excerpt: null }, [{ page: 5, text: "EBITDA margin 18.5%" }]);
+    expect(r).toEqual({ decision: "verified", source_page: 5 });
+  });
+
+  it("verifies a negative value when the negative number is on the page", () => {
+    const r = matchMetric({ value: -150, excerpt: null }, [{ page: 5, text: "net loss of -150 cr" }]);
+    expect(r).toEqual({ decision: "verified", source_page: 5 });
+  });
 });

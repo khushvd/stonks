@@ -1,11 +1,14 @@
 import type { Citation } from "../types.js";
 
+// Parse a number anchored at the START of the string (after optional currency/space), so
+// period/label strings like "FY26" or "see note 3" yield null and are dropped, while
+// "9,200", "9,200 cr", and "₹ 18.5" parse correctly.
 function toNumber(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   if (typeof v !== "string") return null;
-  const m = v.replace(/,/g, "").match(/-?\d+(\.\d+)?/);
+  const m = v.replace(/,/g, "").match(/^\s*[₹$]?\s*(-?\d+(?:\.\d+)?)/);
   if (!m) return null;
-  const n = Number(m[0]);
+  const n = Number(m[1]);
   return Number.isFinite(n) ? n : null;
 }
 

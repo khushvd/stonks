@@ -38,4 +38,15 @@ describe("parseCitations", () => {
     expect(parseCitations("sorry, I could not find that")).toEqual([]);
     expect(parseCitations(JSON.stringify({ foo: "bar" }))).toEqual([]);
   });
+
+  it("drops period/label-like strings instead of extracting a stray digit (FY26 -> dropped)", () => {
+    const raw = JSON.stringify([
+      { name: "revenue", value: "FY26", excerpt: "fiscal year" },
+      { name: "pat", value: "see note 3", excerpt: "footnote" },
+      { name: "ebitda", value: "9,200 cr", excerpt: "EBITDA 9,200 cr" },
+    ]);
+    const got = parseCitations(raw);
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ name: "ebitda", value: 9200 });
+  });
 });
