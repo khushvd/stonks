@@ -114,7 +114,7 @@ is not idempotent.
 ## Metric resolution (canonical set)
 
 1. **Universal base** (always, every company): revenue, PAT, EBITDA, EBITDA margin,
-   EPS, total debt. Stable dashboard columns, comparable across companies.
+   EPS, total debt, PAT margin, debt/equity, market cap, ev/ebitda, ev. Stable dashboard columns, comparable across companies.
 2. **Industry-specific** (e.g. hotels → occupancy / ARR; cement → logistics cost /
    realisation; BFSI → NPA / NIM): **NotebookLM infers** the decision-relevant metrics
    for the company's industry (it has the docs in context). Cached in `industry_metrics`
