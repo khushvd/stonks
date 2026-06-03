@@ -54,4 +54,15 @@ describe("verifyPending", () => {
     expect(rejected).toHaveLength(1);
     expect(rejected[0].reject_reason).toMatch(/not found/i);
   });
+
+  it("rejects with a clear reason when the filing has no downloaded PDF", async () => {
+    const db = openDb(":memory:");
+    const companyId = upsertCompany(db, { name: "NoPDF Co", ticker: "NOPDF", industry: null });
+    const filingId = insertFiling(db, { company_id: companyId, type: "result", period: "Q4FY26", source_url: "u", local_path: null });
+    stageMetric(db, { filing_id: filingId, name: "pat", value: 8330, unit: null, period: null, source_page: null, excerpt: "PAT 8,330", source_url: "u" });
+    await verifyPending(db, companyId, async () => []);
+    const rejected = listStaging(db, "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reject_reason).toMatch(/no (source )?pdf|not downloaded|local_path/i);
+  });
 });

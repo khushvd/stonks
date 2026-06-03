@@ -37,7 +37,10 @@ export async function verifyPending(
     }
     const res = matchMetric({ value: m.value, excerpt: m.excerpt }, pages);
     if (res.decision === "reject") {
-      rejectMetric(db, m.id, "value and excerpt not found in source PDF");
+      const reason = pages.length === 0
+        ? "source PDF not downloaded (local_path missing)"
+        : "value and excerpt not found in source PDF";
+      rejectMetric(db, m.id, reason);
     } else {
       setSourcePage.run(res.source_page, m.id);
       promoteMetric(db, m.id, res.decision);

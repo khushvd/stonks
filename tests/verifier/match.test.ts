@@ -63,4 +63,24 @@ describe("matchMetric", () => {
     const r = matchMetric({ value: -150, excerpt: null }, [{ page: 5, text: "net loss of -150 cr" }]);
     expect(r).toEqual({ decision: "verified", source_page: 5 });
   });
+
+  it("does NOT verify a number glued to letters (18 vs FY18)", () => {
+    const r = matchMetric({ value: 18, excerpt: null }, [{ page: 5, text: "Guidance for FY18 onwards" }]);
+    expect(r).toEqual({ decision: "reject", source_page: null });
+  });
+
+  it("does NOT verify a number immediately followed by letters (3 vs Q3)", () => {
+    const r = matchMetric({ value: 3, excerpt: null }, [{ page: 5, text: "Results for Q3 were strong" }]);
+    expect(r).toEqual({ decision: "reject", source_page: null });
+  });
+
+  it("still verifies a number preceded by a currency symbol (8330 vs ₹8,330)", () => {
+    const r = matchMetric({ value: 8330, excerpt: null }, [{ page: 5, text: "PAT was ₹8,330 cr" }]);
+    expect(r).toEqual({ decision: "verified", source_page: 5 });
+  });
+
+  it("still verifies a decimal followed by a percent sign (18.5 vs 18.5%)", () => {
+    const r = matchMetric({ value: 18.5, excerpt: null }, [{ page: 5, text: "margin 18.5% this year" }]);
+    expect(r).toEqual({ decision: "verified", source_page: 5 });
+  });
 });

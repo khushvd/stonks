@@ -10,7 +10,10 @@ export interface MatchResult {
 // Tokenizes number-like substrings and compares numerically, so 330 does NOT match "8,330",
 // 18 does NOT match "18.5", and -150 does NOT match "150".
 function pageHasValue(text: string, value: number): boolean {
-  const re = /-?\d[\d,]*(?:\.\d+)?/g;
+  // Boundaries: not preceded by a letter/digit/comma/dot (so "FY18" and digits inside a larger
+  // number don't match), not followed by a letter (so "18A"/"Q3" don't match). A trailing % or
+  // currency/space is fine.
+  const re = /(?<![A-Za-z\d.,])-?\d[\d,]*(?:\.\d+)?(?![A-Za-z\d])/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const n = Number(m[0].replace(/,/g, ""));
