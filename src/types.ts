@@ -22,6 +22,8 @@ export interface Filing {
   local_path: string | null;
 }
 
+export type Trust = "verified" | "notebooklm-only";
+
 export interface MetricInput {
   filing_id: number;
   name: string;
@@ -29,21 +31,55 @@ export interface MetricInput {
   unit: string | null;
   period: string | null;
   source_page: number | null;
+  excerpt: string | null;
+  source_url: string | null;
 }
 
-export interface Metric extends MetricInput {
+export interface Metric {
   id: number;
+  filing_id: number;
+  name: string;
+  value: number;
+  unit: string | null;
+  period: string | null;
+  source_page: number | null;
+  trust: Trust;
 }
 
-export interface StagedMetric extends Metric {
+export interface StagedMetric extends MetricInput {
+  id: number;
   status: "pending" | "rejected";
   reject_reason: string | null;
 }
 
 export interface IntegritySummary {
   verified: number;
+  notebooklmOnly: number;
   pending: number;
   rejected: number;
+}
+
+export interface Notebook {
+  company_id: number;
+  notebook_url: string | null;
+  notebook_id: string | null;
+}
+
+export interface IndustryMetric {
+  industry: string;
+  metric_key: string;
+  label: string | null;
+  source: "notebooklm" | "sonnet";
+}
+
+/** One normalized metric proposed by NotebookLM, paired with the citation that backs it. */
+export interface Citation {
+  name: string;
+  value: number;
+  unit: string | null;
+  period: string | null;
+  excerpt: string | null;
+  sourceUrl: string | null;
 }
 
 export interface PageText {
