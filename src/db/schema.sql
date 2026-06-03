@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS filings (
   period TEXT,
   source_url TEXT,
   local_path TEXT,
+  notebooklm_source_id TEXT,
   UNIQUE(company_id, type, period, source_url)
 );
 
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS metrics_staging (
   source_page INTEGER,
   excerpt TEXT,
   source_url TEXT,
+  notebooklm_source_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','rejected')),
   reject_reason TEXT
 );

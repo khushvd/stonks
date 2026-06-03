@@ -15,4 +15,10 @@ export function migrate(db: Database.Database): void {
   if (!hasColumn(db, "metrics_staging", "source_url")) {
     db.exec("ALTER TABLE metrics_staging ADD COLUMN source_url TEXT");
   }
+  if (!hasColumn(db, "filings", "notebooklm_source_id")) {
+    db.exec("ALTER TABLE filings ADD COLUMN notebooklm_source_id TEXT");
+  }
+  if (!hasColumn(db, "metrics_staging", "notebooklm_source_id")) {
+    db.exec("ALTER TABLE metrics_staging ADD COLUMN notebooklm_source_id TEXT");
+  }
 }

@@ -5,6 +5,7 @@ import { migrate } from "../../src/db/migrate.js";
 function legacyDb(): Database.Database {
   const db = new Database(":memory:");
   db.exec(`
+    CREATE TABLE filings (id INTEGER PRIMARY KEY, company_id INTEGER, type TEXT, period TEXT, source_url TEXT, local_path TEXT);
     CREATE TABLE metrics (id INTEGER PRIMARY KEY, filing_id INTEGER, name TEXT, value REAL, unit TEXT, period TEXT, source_page INTEGER);
     CREATE TABLE metrics_staging (id INTEGER PRIMARY KEY, filing_id INTEGER, name TEXT, value REAL, unit TEXT, period TEXT, source_page INTEGER, status TEXT, reject_reason TEXT);
   `);
@@ -36,5 +37,12 @@ describe("migrate", () => {
     const db = legacyDb();
     migrate(db);
     expect(() => migrate(db)).not.toThrow();
+  });
+
+  it("adds notebooklm_source_id to filings and metrics_staging", () => {
+    const db = legacyDb();
+    migrate(db);
+    expect(columns(db, "filings")).toContain("notebooklm_source_id");
+    expect(columns(db, "metrics_staging")).toContain("notebooklm_source_id");
   });
 });
