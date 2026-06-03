@@ -2,6 +2,7 @@ import { openDb } from "../db/db.js";
 import { stageMetric, promoteMetric, rejectMetric, listMetrics, listStaging, integritySummary } from "../db/metrics.js";
 import { getNotebook, upsertNotebook } from "../db/notebooks.js";
 import { getIndustryMetrics, setIndustryMetrics } from "../db/industry-metrics.js";
+import { selectCitation } from "../notebooklm/parse-citations.js";
 import type { Trust } from "../types.js";
 
 const [, , cmd, ...rest] = process.argv;
@@ -29,7 +30,9 @@ switch (cmd) {
   case "get-industry-metrics": { out(getIndustryMetrics(db, rest[0])); break; }
   // pnpm db set-industry-metrics <industry> <notebooklm|sonnet> '<json [{metric_key,label}]>'
   case "set-industry-metrics": { setIndustryMetrics(db, rest[0], JSON.parse(rest[2]), rest[1] as "notebooklm" | "sonnet"); out({ ok: true }); break; }
+  // pnpm db select-citation <value> '<raw notebooklm ask --json output>'
+  case "select-citation": { out(selectCitation(rest[1] ?? "", Number(rest[0]))); break; }
   default:
-    console.error("commands: stage <json> | promote <id> [trust] | reject <id> <reason> | list-metrics [filingId] | list-staging [status] | summary | get-notebook <companyId> | set-notebook <companyId> <url> [notebookId] | get-industry-metrics <industry> | set-industry-metrics <industry> <source> <json>");
+    console.error("commands: stage <json> | promote <id> [trust] | reject <id> <reason> | list-metrics [filingId] | list-staging [status] | summary | get-notebook <companyId> | set-notebook <companyId> <url> [notebookId] | get-industry-metrics <industry> | set-industry-metrics <industry> <source> <json> | select-citation <value> <askJson>");
     process.exit(1);
 }
