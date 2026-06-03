@@ -20,6 +20,7 @@ export interface Filing {
   period: string | null;
   source_url: string | null;
   local_path: string | null;
+  notebooklm_source_id: string | null;
 }
 
 export type Trust = "verified" | "notebooklm-only";
