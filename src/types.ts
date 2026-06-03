@@ -72,16 +72,6 @@ export interface IndustryMetric {
   source: "notebooklm" | "sonnet";
 }
 
-/** One normalized metric proposed by NotebookLM, paired with the citation that backs it. */
-export interface Citation {
-  name: string;
-  value: number;
-  unit: string | null;
-  period: string | null;
-  excerpt: string | null;
-  sourceUrl: string | null;
-}
-
 export interface PageText {
   page: number;
   text: string;

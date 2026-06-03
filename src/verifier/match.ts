@@ -6,20 +6,24 @@ export interface MatchResult {
   source_page: number | null;
 }
 
-// True if `value` appears on the page AS A NUMBER (exact numeric equality, comma/decimal aware).
-// Tokenizes number-like substrings and compares numerically, so 330 does NOT match "8,330",
-// 18 does NOT match "18.5", and -150 does NOT match "150".
-function pageHasValue(text: string, value: number): boolean {
-  // Boundaries: not preceded by a letter/digit/comma/dot (so "FY18" and digits inside a larger
-  // number don't match), not followed by a letter (so "18A"/"Q3" don't match). A trailing % or
-  // currency/space is fine.
+// Every number-like token in `text`, parsed to a JS number. Boundaries: not preceded by a
+// letter/digit/comma/dot (so "FY18" and digits inside a larger number don't match), not
+// followed by a letter (so "18A"/"Q3" don't match). A trailing % or currency/space is fine.
+// Shared by the verifier and the citation selector so the matching rule lives in ONE place.
+export function extractNumbers(text: string): number[] {
   const re = /(?<![A-Za-z\d.,])-?\d[\d,]*(?:\.\d+)?(?![A-Za-z\d])/g;
+  const out: number[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const n = Number(m[0].replace(/,/g, ""));
-    if (Number.isFinite(n) && n === value) return true;
+    if (Number.isFinite(n)) out.push(n);
   }
-  return false;
+  return out;
+}
+
+// True if `value` appears on the page AS A NUMBER (exact numeric equality, comma/decimal aware).
+function pageHasValue(text: string, value: number): boolean {
+  return extractNumbers(text).includes(value);
 }
 
 // Distinctive substring of the excerpt to look for (collapse whitespace, take a chunk).

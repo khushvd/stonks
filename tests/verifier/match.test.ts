@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchMetric } from "../../src/verifier/match.js";
+import { matchMetric, extractNumbers } from "../../src/verifier/match.js";
 import type { PageText } from "../../src/types.js";
 
 const pages: PageText[] = [
@@ -82,5 +82,14 @@ describe("matchMetric", () => {
   it("still verifies a decimal followed by a percent sign (18.5 vs 18.5%)", () => {
     const r = matchMetric({ value: 18.5, excerpt: null }, [{ page: 5, text: "margin 18.5% this year" }]);
     expect(r).toEqual({ decision: "verified", source_page: 5 });
+  });
+});
+
+describe("extractNumbers", () => {
+  it("tokenizes comma/decimal numbers and ignores label-glued digits", () => {
+    expect(extractNumbers("Revenue 9,228 cr, margin 18.5%")).toEqual([9228, 18.5]);
+    expect(extractNumbers("FY18 vs Q3 FY26")).toEqual([]); // FY18, Q3, FY26 all letter-glued
+    expect(extractNumbers("no numbers here")).toEqual([]);
+    expect(extractNumbers("₹9,228 crore")).toEqual([9228]); // currency prefix is fine
   });
 });

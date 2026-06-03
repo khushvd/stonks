@@ -1,56 +1,32 @@
-import type { Citation } from "../types.js";
+import { extractNumbers } from "../verifier/match.js";
 
-// Parse a number anchored at the START of the string (after optional currency/space), so
-// period/label strings like "FY26" or "see note 3" yield null and are dropped, while
-// "9,200", "9,200 cr", and "₹ 18.5" parse correctly.
-function toNumber(v: unknown): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v !== "string") return null;
-  const m = v.replace(/,/g, "").match(/^\s*[₹$]?\s*(-?\d+(?:\.\d+)?)/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) ? n : null;
+/** The citation backing a value: the cited excerpt and the NotebookLM source it came from. */
+export interface CitationPick {
+  excerpt: string | null;
+  sourceId: string | null;
 }
 
-function str(v: unknown): string | null {
-  return typeof v === "string" && v.trim() !== "" ? v : null;
-}
-
-function rowsFrom(parsed: unknown): unknown[] {
-  if (Array.isArray(parsed)) return parsed;
-  if (parsed && typeof parsed === "object") {
-    for (const key of ["metrics", "citations", "answer", "results", "data"]) {
-      const v = (parsed as Record<string, unknown>)[key];
-      if (Array.isArray(v)) return v;
-    }
-  }
-  return [];
-}
-
-// Tolerant: parse NotebookLM's ask_question JSON into clean Citations.
-// Drops any row without a name and a usable number — the integrity gate prefers gaps to guesses.
-export function parseCitations(raw: string): Citation[] {
+// Parse `notebooklm ask --json` output and return the FIRST reference whose cited_text contains
+// `value` by numeric equality (reusing the verifier's tokenizer, so "9,228"/"₹9,228 crore"/"9228"
+// all match 9228 and "FY18" does not match 18). No match / bad JSON -> honest nulls.
+export function selectCitation(askJsonRaw: string, value: number): CitationPick {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(askJsonRaw);
   } catch {
-    return [];
+    return { excerpt: null, sourceId: null };
   }
-  const out: Citation[] = [];
-  for (const r of rowsFrom(parsed)) {
+  const refs =
+    parsed && typeof parsed === "object" && Array.isArray((parsed as { references?: unknown }).references)
+      ? ((parsed as { references: unknown[] }).references)
+      : [];
+  for (const r of refs) {
     if (!r || typeof r !== "object") continue;
     const o = r as Record<string, unknown>;
-    const name = str(o.name);
-    const value = toNumber(o.value);
-    if (name === null || value === null) continue;
-    out.push({
-      name,
-      value,
-      unit: str(o.unit),
-      period: str(o.period),
-      excerpt: str(o.excerpt),
-      sourceUrl: str(o.url) ?? str(o.sourceUrl),
-    });
+    const cited = typeof o.cited_text === "string" ? o.cited_text : "";
+    if (extractNumbers(cited).includes(value)) {
+      return { excerpt: cited, sourceId: typeof o.source_id === "string" ? o.source_id : null };
+    }
   }
-  return out;
+  return { excerpt: null, sourceId: null };
 }
