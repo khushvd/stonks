@@ -1,14 +1,20 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as Plot from "@observablehq/plot";
 import type { MetricRow } from "../../src/dashboard/data.js";
 
 // Render a single margin-trend line if there are ≥2 verified margin points; otherwise render nothing.
 export function MarginChart({ rows }: { rows: MetricRow[] }) {
   const ref = useRef<HTMLDivElement>(null);
-  const points = rows
-    .filter((m) => m.trust === "verified" && /margin/i.test(m.name) && m.period)
-    .map((m) => ({ period: m.period as string, value: m.value }));
+  // Memoize on `rows` so the array identity is stable across renders — otherwise a fresh array
+  // literal each render would re-fire the effect (remove + re-append the chart) on every re-render.
+  const points = useMemo(
+    () =>
+      rows
+        .filter((m) => m.trust === "verified" && /margin/i.test(m.name) && m.period)
+        .map((m) => ({ period: m.period as string, value: m.value })),
+    [rows],
+  );
 
   useEffect(() => {
     if (!ref.current || points.length < 2) return;
