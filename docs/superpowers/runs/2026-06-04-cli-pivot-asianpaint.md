@@ -21,11 +21,11 @@ then returned a clean no-op — proving idempotency:
   "added": [], "skipped": [filing 1..4 with their source ids], "failed": [] }
 ```
 
-> **Finding (follow-up, not a blocker):** `runIngest` is only idempotent against filings *it*
-> uploaded — it has no logic to match a notebook's pre-existing sources to filings by filename,
-> so a fresh-DB run against an already-populated notebook would duplicate-upload. The backfill
-> above was a one-off workaround. Recommended enhancement: before uploading, `runIngest` should
-> `notebooklm source list` and record ids for filenames already present.
+> **Finding (RESOLVED 2026-06-04, commit `9112a45`):** `runIngest` was only idempotent against
+> filings *it* uploaded — a fresh-DB run against an already-populated notebook would duplicate-upload.
+> Fixed: `runIngest` now runs `notebooklm source list` up front and adopts any source whose title
+> matches a filing's filename (recording the id, skipping the upload). The manual backfill above is
+> no longer needed.
 
 ## Extract (extractor agent, Sonnet, live `notebooklm ask`)
 Staged 3 universal metrics for Q4FY26 (all `pending`, none promoted):
