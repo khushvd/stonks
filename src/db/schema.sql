@@ -55,3 +55,11 @@ CREATE TABLE IF NOT EXISTS industry_metrics (
   source TEXT NOT NULL CHECK(source IN ('notebooklm','sonnet')),
   PRIMARY KEY (industry, metric_key)
 );
+
+CREATE TABLE IF NOT EXISTS briefs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  ask TEXT,
+  json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
