@@ -40,6 +40,10 @@ export function parseLine(line: string): AgentEvent | null {
 
   if (o.type === "assistant") {
     const content = o.message?.content ?? [];
+    // A tool_use always wins over narration in the same message: a `pnpm` step must not be
+    // dropped just because a text block happened to come first. Stash the first text block and
+    // only fall back to it once the loop confirms there is no tool_use.
+    let firstText: string | null = null;
     for (const block of content) {
       if (block.type === "tool_use") {
         const cmd = block.input?.command;
@@ -47,10 +51,11 @@ export function parseLine(line: string): AgentEvent | null {
         if (label) return { kind: "step", label };
         return { kind: "tool", name: block.name ?? "tool", summary: block.name ?? "tool" };
       }
-      if (block.type === "text" && block.text) {
-        return { kind: "text", text: block.text };
+      if (firstText === null && block.type === "text" && block.text) {
+        firstText = block.text;
       }
     }
+    if (firstText !== null) return { kind: "text", text: firstText };
     return null;
   }
 

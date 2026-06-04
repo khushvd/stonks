@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runCoordinator, COORDINATOR_ARGS } from "../../src/coordinator/run.js";
+import { runCoordinator, coordinatorArgs } from "../../src/coordinator/run.js";
 import type { Spawner, AgentEvent } from "../../src/coordinator/types.js";
 
 // A fake spawner that yields the given raw chunks (deliberately split mid-line to prove buffering).
@@ -18,9 +18,9 @@ async function collect(it: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
   return out;
 }
 
-describe("COORDINATOR_ARGS", () => {
+describe("coordinatorArgs", () => {
   it("pins a cheap model and requests stream-json (constraint: no Opus)", () => {
-    const args = COORDINATOR_ARGS("PROMPT");
+    const args = coordinatorArgs("PROMPT");
     expect(args).toContain("--model");
     expect(args[args.indexOf("--model") + 1]).toBe("sonnet");
     expect(args).toContain("--output-format");
@@ -47,6 +47,7 @@ describe("runCoordinator", () => {
   it("emits a terminal error event when the process exits non-zero without a result line", async () => {
     const spawn = fakeSpawner(["garbage\n"], 1);
     const events = await collect(runCoordinator("X", "ask", spawn));
+    expect(events).toHaveLength(1);
     expect(events.at(-1)).toEqual({ kind: "error", message: expect.stringContaining("exited with code 1") });
   });
 

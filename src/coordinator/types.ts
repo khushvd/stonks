@@ -12,6 +12,9 @@ export type AgentEvent =
 export interface SpawnedProcess {
   stdout: AsyncIterable<string>;
   exitCode: Promise<number>;
+  // Collected stderr, resolved on close. Used to surface startup/auth crashes in the error message.
+  // Optional so lightweight fakes (tests) can omit it.
+  stderr?: Promise<string>;
 }
 
 // Injectable spawner. Default implementation shells out to the real `claude` binary.

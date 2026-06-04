@@ -54,6 +54,32 @@ describe("parseLine", () => {
     expect(parseLine(line)).toEqual({ kind: "tool", name: "Read", summary: "Read" });
   });
 
+  it("lets a tool_use win over a preceding text block in the same message", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "Now verifying." },
+          { type: "tool_use", name: "Bash", input: { command: "pnpm verify" } },
+        ],
+      },
+    });
+    expect(parseLine(line)).toEqual({ kind: "step", label: "Verify vs source" });
+  });
+
+  it("lets a tool_use win when it precedes a text block too", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_use", name: "Bash", input: { command: "pnpm verify" } },
+          { type: "text", text: "Now verifying." },
+        ],
+      },
+    });
+    expect(parseLine(line)).toEqual({ kind: "step", label: "Verify vs source" });
+  });
+
   it("parses a success result into a done event", () => {
     const line = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "3 verified metrics." });
     expect(parseLine(line)).toEqual({ kind: "done", ok: true, summary: "3 verified metrics." });
