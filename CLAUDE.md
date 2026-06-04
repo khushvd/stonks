@@ -18,9 +18,9 @@ Full design: `docs/superpowers/specs/2026-06-03-investment-analysis-agents-desig
 ## Architecture (one-liner)
 
 Next.js app (localhost:4317) → `/api/run` spawns one `claude -p` Coordinator → Coordinator runs a
-FIXED pnpm chain (scrape → ingest → extract → verify → db summary) via Bash, streaming stream-json
-back over SSE → read-only trust dashboard. Data: SQLite (structured metrics) + NotebookLM (document
-corpus, via the `notebooklm` CLI) + filesystem (raw PDFs).
+FIXED pnpm chain (scrape → ingest → **synthesize** → extract → verify → db summary) via Bash, streaming
+stream-json back over SSE → **cited research brief (headline)** + trust evidence dashboard. Data: SQLite
+(structured metrics + briefs) + NotebookLM (document corpus, via the `notebooklm` CLI) + filesystem (raw PDFs).
 
 ## Stack
 
@@ -37,6 +37,7 @@ pnpm build                      # next build (must pass before any commit touchi
 pnpm dev                        # next dev on :4317  (app UI)
 pnpm scrape "<Company>"         # Playwright → screener.in → PDFs + filings rows
 pnpm ingest "<Company>"         # upload filing PDFs into the company's NotebookLM notebook (idempotent)
+pnpm synthesize "<Company>" "<ask>"   # NotebookLM → cited research brief (proposer; verifier disposes embedded numbers)
 pnpm -s extract "<Company>" "<ask>"   # build the extractor payload (use -s: pnpm banner pollutes JSON stdout)
 pnpm verify                     # deterministic pdfjs integrity gate over staged metrics
 pnpm db <subcommand>            # db utilities incl. `select-citation` (deterministic citation picker)
@@ -57,16 +58,20 @@ stray dev servers on the fixed port first: `lsof -ti tcp:4317 | xargs kill`.
 - `src/notebooklm/` — `cli.ts` (typed wrappers over the `notebooklm` binary, injectable `Runner`),
   `parse-citations.ts` (`selectCitation` — picks the backing reference by numeric equality)
 - `src/verifier/` — `match.ts` (`extractNumbers` tokenizer + `pageHasValue`), `verify.ts` (source-scoped gate)
-- `src/db/` — schema + per-table helpers; `migrate.ts` guarded ALTERs
-- `src/scraper/`, `src/pdf/`, `src/extract/`, `src/cli/` — Playwright, pdfjs text, canonical metric list, CLI entrypoints
+- `src/db/` — schema + per-table helpers; `migrate.ts` guarded ALTERs; `briefs.ts` (`saveBrief`/`getLatestBrief`)
+- `src/synthesis/` — `types.ts` (Brief/Claim/BriefRef), `prompt.ts` (injection-guarded analyst-frame question builder),
+  `brief.ts` (defensive JSON parser, prose/fence tolerant), `stage.ts` (stage claim numbers for the verifier)
+- `src/scraper/`, `src/pdf/`, `src/extract/`, `src/cli/` — Playwright, pdfjs text, canonical metric list,
+  CLI entrypoints incl. `synthesize.ts` (NotebookLM → brief → stage → persist)
 - `src/coordinator/` — `stream.ts` (pure stream-json→`AgentEvent` parser), `prompt.ts` (injection-guarded
   fixed-chain prompt builder), `run.ts` (injectable `Spawner`, AbortSignal→kill so a disconnect never
   orphans a billable run), `types.ts`
 - `src/dashboard/` — `trust.ts` (badge/integrity-chip presentation), `citation.ts` (traversal-hardened
-  PDF path resolver + `#page=N` href), `data.ts` (`getDashboard` shaping over `src/db`, NO raw SQL)
+  PDF path resolver + `#page=N` href + page-less `buildSourceHref`), `data.ts` (`getDashboard` shaping over
+  `src/db`, NO raw SQL — now includes `BriefView` with resolved source links + trust badges)
 - `app/` — Next.js App Router. `api/{dashboard,pdf,run}/route.ts` (all `runtime="nodejs"`; `run` is the
-  SSE coordinator stream), `components/*.tsx` (trust dashboard, control rail, live progress feed,
-  margin chart), `page.tsx` (Layout-A two-pane). `scripts/stonks.command` = the launcher.
+  SSE coordinator stream), `components/*.tsx` (**BriefPanel** is the headline; MetricsTable/IntegrityTile/
+  MarginChart demoted to Evidence section), `page.tsx` (Layout-A two-pane). `scripts/stonks.command` = the launcher.
 
 ## Build phases
 
@@ -84,6 +89,14 @@ stray dev servers on the fixed port first: `lsof -ti tcp:4317 | xargs kill`.
      chart (`src/dashboard/`, `app/components/`), double-clickable launcher. Single-turn `{company,
      ask}` → Run → live feed → dashboard. 103 tests green; manual golden-path E2E verified.
      Spec: `docs/superpowers/specs/2026-06-04-stonks-b1-app-design.md`; plan: `.../plans/2026-06-04-stonks-b1-app.md`.
+   - **Cited research brief: DONE (2026-06-05).** `pnpm synthesize` step added to the coordinator chain
+     (scrape → ingest → **synthesize** → extract → verify → db summary). `briefs` table, `src/synthesis/`
+     (types, prompt, parser, stager), `BriefPanel` as the dashboard headline. Evidence metrics scoped to
+     brief-referenced ∪ universal core. 125 tests green.
+     Spec: `docs/superpowers/specs/2026-06-05-stonks-research-brief-design.md`; plan: `.../plans/2026-06-05-stonks-research-brief.md`.
+     **Deferred to Phase 2 (benchmarking):** the deterministic `screener` trust tier — `metrics.filing_id`
+     is `NOT NULL`, so screener-table numbers (no PDF) can't attach without a nullable FK migration. The
+     brief already uses NotebookLM-extracted verified metrics as evidence; screener wiring is Phase 2 work.
    - **Next: B-full** — multi-turn conversational chat that refines/re-asks/adds companies and surfaces
      NotebookLM cross-document narrative synthesis. B1 built the rails (`ask` field, coordinator, SSE).
      Not started; needs its own brainstorm→spec→plan.
