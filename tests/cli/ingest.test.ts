@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { openDb } from "../../src/db/db.js";
 import { upsertCompany } from "../../src/db/companies.js";
 import { insertFiling, listFilings } from "../../src/db/filings.js";
-import { getNotebook } from "../../src/db/notebooks.js";
+import { getNotebook, upsertNotebook } from "../../src/db/notebooks.js";
 import { runIngest, type IngestDeps } from "../../src/cli/ingest.js";
 
 function setup() {
@@ -14,13 +14,19 @@ function setup() {
 }
 
 function makeDeps() {
-  const calls = { create: 0, add: [] as string[], wait: [] as string[] };
+  const calls = {
+    create: 0,
+    add: [] as string[],
+    wait: [] as string[],
+    sources: [] as { id: string; title: string; status: string }[],
+  };
   let n = 0;
   const deps: IngestDeps = {
     nbList: async () => ({ notebooks: [] }),
     nbCreate: async () => { calls.create++; return { id: "nb-123" }; },
     nbSourceAdd: async (_nb, filePath) => { calls.add.push(filePath); return { id: `src-${++n}`, title: filePath }; },
     nbSourceWait: async (_nb, sid) => { calls.wait.push(sid); },
+    nbSourceList: async () => calls.sources,
   };
   return { deps, calls };
 }
@@ -64,5 +70,30 @@ describe("runIngest", () => {
     const { db } = setup();
     const { deps } = makeDeps();
     await expect(runIngest(db, "Nonexistent Co", deps)).rejects.toThrow(/not found/i);
+  });
+
+  it("adopts a pre-existing notebook source by filename instead of re-uploading", async () => {
+    const { db, companyId } = setup();
+    const { deps, calls } = makeDeps();
+    // Pre-seed a notebook so it is reused, and a source whose title matches filing /a.pdf's basename.
+    upsertNotebook(db, companyId, "https://nb", "nb-123");
+    calls.sources = [{ id: "existing-a", title: "a.pdf", status: "ready" }];
+
+    const summary = await runIngest(db, "Asian Paints", deps);
+
+    expect(calls.add).toEqual(["/b.pdf"]); // only the unmatched filing is uploaded
+    expect(summary.adopted).toEqual([{ filing_id: expect.any(Number), source_id: "existing-a" }]);
+    expect(summary.added).toHaveLength(1);
+    const ids = listFilings(db, companyId).map((f) => f.notebooklm_source_id);
+    expect(ids).toContain("existing-a");
+  });
+
+  it("still uploads when no notebook source title matches", async () => {
+    const { db } = setup();
+    const { deps, calls } = makeDeps();
+    calls.sources = [{ id: "unrelated", title: "something-else.pdf", status: "ready" }];
+    const summary = await runIngest(db, "Asian Paints", deps);
+    expect(calls.add).toEqual(["/a.pdf", "/b.pdf"]);
+    expect(summary.adopted).toEqual([]);
   });
 });

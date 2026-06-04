@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nbList, nbCreate, nbSourceAdd, nbSourceWait, nbAsk, type Runner } from "../../src/notebooklm/cli.js";
+import { nbList, nbCreate, nbSourceAdd, nbSourceWait, nbAsk, nbSourceList, type Runner } from "../../src/notebooklm/cli.js";
 
 const ok = (stdout: string): Runner => async () => ({ stdout, stderr: "" });
 const fail = (stderr: string): Runner => async () => {
@@ -46,6 +46,13 @@ describe("notebooklm cli wrapper", () => {
 
   it("throws on unparseable output", async () => {
     await expect(nbList(ok("not json at all"))).rejects.toThrow(/unparseable/i);
+  });
+
+  it("nbSourceList returns the sources array (empty when none)", async () => {
+    const run = ok(JSON.stringify({ notebook_id: "nb1", sources: [{ index: 1, id: "src-1", title: "result-0.pdf", type: "SourceType.PDF", status: "ready" }], count: 1 }));
+    const res = await nbSourceList("nb1", run);
+    expect(res).toEqual([{ index: 1, id: "src-1", title: "result-0.pdf", type: "SourceType.PDF", status: "ready" }]);
+    await expect(nbSourceList("nb1", ok(JSON.stringify({ sources: [] })))).resolves.toEqual([]);
   });
 
   it("refuses untrusted positionals that begin with '-' (argv flag-smuggling)", async () => {

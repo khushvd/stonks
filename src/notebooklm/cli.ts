@@ -71,6 +71,17 @@ export async function nbSourceAdd(
   return { id: res.source.id, title: res.source.title };
 }
 
+export async function nbSourceList(
+  notebookId: string,
+  run: Runner = defaultRun,
+): Promise<{ id: string; title: string; status: string }[]> {
+  const res = await runJson<{ sources?: { id: string; title: string; status: string }[] }>(
+    run,
+    ["source", "list", "-n", notebookId, "--json"],
+  );
+  return Array.isArray(res.sources) ? res.sources : [];
+}
+
 export async function nbSourceWait(notebookId: string, sourceId: string, run: Runner = defaultRun): Promise<void> {
   // Blocks until the source is "ready"; prints a human line, not JSON.
   await runRaw(run, ["source", "wait", sourceId, "-n", notebookId]);

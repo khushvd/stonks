@@ -1,16 +1,18 @@
 import "dotenv/config";
+import { basename } from "node:path";
 import type Database from "better-sqlite3";
 import { openDb } from "../db/db.js";
 import { getCompany } from "../db/companies.js";
 import { listFilings, setFilingSourceId } from "../db/filings.js";
 import { getNotebook, upsertNotebook } from "../db/notebooks.js";
-import { nbList, nbCreate, nbSourceAdd, nbSourceWait } from "../notebooklm/cli.js";
+import { nbList, nbCreate, nbSourceAdd, nbSourceWait, nbSourceList } from "../notebooklm/cli.js";
 
 export interface IngestDeps {
   nbList: typeof nbList;
   nbCreate: typeof nbCreate;
   nbSourceAdd: typeof nbSourceAdd;
   nbSourceWait: typeof nbSourceWait;
+  nbSourceList: typeof nbSourceList;
 }
 
 export interface IngestSummary {
@@ -18,6 +20,7 @@ export interface IngestSummary {
   added: { filing_id: number; source_id: string }[];
   skipped: { filing_id: number; source_id: string }[];
   failed: { filing_id: number; error: string }[];
+  adopted: { filing_id: number; source_id: string }[];
 }
 
 export async function runIngest(db: Database.Database, companyName: string, deps: IngestDeps): Promise<IngestSummary> {
@@ -40,12 +43,26 @@ export async function runIngest(db: Database.Database, companyName: string, deps
     upsertNotebook(db, company.id, `https://notebooklm.google.com/notebook/${notebookId}`, notebookId);
   }
 
+  // Adopt sources already present in the notebook (e.g. populated outside this DB) by filename.
+  let existingByTitle = new Map<string, string>();
+  try {
+    for (const s of await deps.nbSourceList(notebookId)) existingByTitle.set(s.title, s.id);
+  } catch {
+    existingByTitle = new Map();
+  }
+
   // 4. Per filing with a local PDF and no source id yet.
-  const summary: IngestSummary = { notebook_id: notebookId, added: [], skipped: [], failed: [] };
+  const summary: IngestSummary = { notebook_id: notebookId, added: [], skipped: [], failed: [], adopted: [] };
   for (const f of listFilings(db, company.id)) {
     if (!f.local_path) continue;
     if (f.notebooklm_source_id) {
       summary.skipped.push({ filing_id: f.id, source_id: f.notebooklm_source_id });
+      continue;
+    }
+    const match = existingByTitle.get(basename(f.local_path));
+    if (match) {
+      setFilingSourceId(db, f.id, match);
+      summary.adopted.push({ filing_id: f.id, source_id: match });
       continue;
     }
     try {
@@ -69,7 +86,7 @@ async function main(): Promise<void> {
   }
   const db = openDb();
   try {
-    const summary = await runIngest(db, name, { nbList, nbCreate, nbSourceAdd, nbSourceWait });
+    const summary = await runIngest(db, name, { nbList, nbCreate, nbSourceAdd, nbSourceWait, nbSourceList });
     console.log(JSON.stringify(summary, null, 2));
     if (summary.failed.length > 0) process.exit(1);
   } catch (e) {
