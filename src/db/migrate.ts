@@ -21,4 +21,37 @@ export function migrate(db: Database.Database): void {
   if (!hasColumn(db, "metrics_staging", "notebooklm_source_id")) {
     db.exec("ALTER TABLE metrics_staging ADD COLUMN notebooklm_source_id TEXT");
   }
+
+  // user_version 1: rebuild metrics table to allow nullable filing_id + add company_id + add 'screener' trust tier.
+  // SQLite cannot ALTER a NOT NULL constraint or CHECK constraint, so we rebuild the table.
+  const userVersion = (db.pragma("user_version", { simple: true }) as number) ?? 0;
+  if (userVersion < 1) {
+    if (!hasColumn(db, "metrics", "company_id")) {
+      // Rebuild the metrics table. Disable FK checks during rebuild so we can create the table
+      // even in test environments that may not have the companies table yet.
+      const fkWasOn = (db.pragma("foreign_keys", { simple: true }) as number) === 1;
+      if (fkWasOn) db.pragma("foreign_keys = OFF");
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE metrics_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filing_id INTEGER REFERENCES filings(id),
+            company_id INTEGER REFERENCES companies(id),
+            name TEXT NOT NULL,
+            value REAL NOT NULL,
+            unit TEXT,
+            period TEXT,
+            source_page INTEGER,
+            trust TEXT NOT NULL DEFAULT 'verified' CHECK(trust IN ('verified','notebooklm-only','screener'))
+          );
+          INSERT INTO metrics_new (id, filing_id, name, value, unit, period, source_page, trust)
+            SELECT id, filing_id, name, value, unit, period, source_page, trust FROM metrics;
+          DROP TABLE metrics;
+          ALTER TABLE metrics_new RENAME TO metrics;
+        `);
+      })();
+      if (fkWasOn) db.pragma("foreign_keys = ON");
+    }
+    db.pragma("user_version = 1");
+  }
 }

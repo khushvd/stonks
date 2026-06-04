@@ -18,13 +18,14 @@ CREATE TABLE IF NOT EXISTS filings (
 
 CREATE TABLE IF NOT EXISTS metrics (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  filing_id INTEGER NOT NULL REFERENCES filings(id),
+  filing_id INTEGER REFERENCES filings(id),
+  company_id INTEGER REFERENCES companies(id),
   name TEXT NOT NULL,
   value REAL NOT NULL,
   unit TEXT,
   period TEXT,
   source_page INTEGER,
-  trust TEXT NOT NULL DEFAULT 'verified' CHECK(trust IN ('verified','notebooklm-only'))
+  trust TEXT NOT NULL DEFAULT 'verified' CHECK(trust IN ('verified','notebooklm-only','screener'))
 );
 
 CREATE TABLE IF NOT EXISTS metrics_staging (

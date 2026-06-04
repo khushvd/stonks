@@ -23,10 +23,11 @@ export interface Filing {
   notebooklm_source_id: string | null;
 }
 
-export type Trust = "verified" | "notebooklm-only";
+export type Trust = "verified" | "notebooklm-only" | "screener";
 
 export interface MetricInput {
-  filing_id: number;
+  filing_id: number | null;
+  company_id?: number | null;
   name: string;
   value: number;
   unit: string | null;
@@ -39,7 +40,8 @@ export interface MetricInput {
 
 export interface Metric {
   id: number;
-  filing_id: number;
+  filing_id: number | null;
+  company_id: number | null;
   name: string;
   value: number;
   unit: string | null;
@@ -48,8 +50,10 @@ export interface Metric {
   trust: Trust;
 }
 
-export interface StagedMetric extends MetricInput {
+// StagedMetric always has a non-null filing_id (the staging table enforces NOT NULL).
+export interface StagedMetric extends Omit<MetricInput, "filing_id"> {
   id: number;
+  filing_id: number;
   status: "pending" | "rejected";
   reject_reason: string | null;
 }

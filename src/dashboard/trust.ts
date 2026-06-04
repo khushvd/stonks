@@ -11,6 +11,7 @@ export interface Badge {
 const BADGES: Record<Trust, Badge> = {
   verified: { label: "VERIFIED", tone: "ok", color: "#00cc33" },
   "notebooklm-only": { label: "NLM-ONLY", tone: "warn", color: "#ffbb33" },
+  screener: { label: "SCREENER", tone: "muted", color: "#888" },
 };
 
 export function trustBadge(trust: Trust): Badge {

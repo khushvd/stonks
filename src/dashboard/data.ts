@@ -14,7 +14,7 @@ export interface MetricRow {
   value: number;
   unit: string | null;
   period: string | null;
-  trust: "verified" | "notebooklm-only";
+  trust: "verified" | "notebooklm-only" | "screener";
   badge: Badge;
   sourcePage: number | null;
   filingType: Filing["type"] | null;
@@ -61,9 +61,10 @@ export function getDashboard(db: Database.Database, companyName: string): Dashbo
   const byId = new Map(filings.map((f) => [f.id, f]));
 
   const allMetrics: MetricRow[] = listMetrics(db)
-    .filter((m) => byId.has(m.filing_id))
+    // Include metrics for this company's filings, OR screener metrics attached directly to company_id
+    .filter((m) => (m.filing_id !== null && byId.has(m.filing_id)) || m.company_id === company.id)
     .map((m) => {
-      const filing = byId.get(m.filing_id) ?? null;
+      const filing = m.filing_id !== null ? (byId.get(m.filing_id) ?? null) : null;
       return {
         name: m.name,
         value: m.value,

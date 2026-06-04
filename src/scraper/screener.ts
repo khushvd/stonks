@@ -53,6 +53,7 @@ export interface ScrapeOptions {
 
 export interface ScrapeResult {
   links: (FilingLink & { local_path: string })[];
+  html: string; // raw screener company page HTML (for parse-financials)
 }
 
 // Scrapes one company by ticker slug, downloads up to `perType` PDFs of each kept
@@ -82,7 +83,7 @@ export async function scrapeCompany(ticker: string, opts: ScrapeOptions = {}): P
         console.error(`WARN: couldn't fetch ${link.url}: ${(e as Error).message}`);
       }
     }
-    return { links: out };
+    return { links: out, html };
   } finally {
     await browser?.close();
   }
