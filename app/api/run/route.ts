@@ -20,10 +20,13 @@ export async function POST(req: Request) {
   if (!company) return new Response(JSON.stringify({ error: "missing company" }), { status: 400 });
 
   const encoder = new TextEncoder();
+  // Abort the coordinator (kill the `claude` child) if the browser disconnects mid-stream,
+  // so a headless run never keeps billing after nobody is listening.
+  const ac = new AbortController();
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const ev of runCoordinator(company, ask)) {
+        for await (const ev of runCoordinator(company, ask, undefined, ac.signal)) {
           controller.enqueue(encoder.encode(sse(ev)));
         }
       } catch (e) {
@@ -31,6 +34,9 @@ export async function POST(req: Request) {
       } finally {
         controller.close();
       }
+    },
+    cancel() {
+      ac.abort();
     },
   });
 

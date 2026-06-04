@@ -57,4 +57,39 @@ describe("runCoordinator", () => {
     const events = await collect(runCoordinator("X", "ask", spawn));
     expect(events).toEqual([{ kind: "done", ok: true, summary: "ok." }]);
   });
+
+  it("kills the subprocess and stops cleanly when the AbortSignal fires (client disconnect)", async () => {
+    let killed = false;
+    let endStdout: () => void = () => {};
+    const stdoutDone = new Promise<void>((r) => {
+      endStdout = r;
+    });
+    // stdout emits one line then blocks forever, simulating a long-running coordinator.
+    const spawn: Spawner = () => ({
+      stdout: (async function* () {
+        yield JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "starting" }] } }) + "\n";
+        await stdoutDone; // hang until kill()
+      })(),
+      exitCode: stdoutDone.then(() => 0),
+      kill: () => {
+        killed = true;
+        endStdout(); // killing the process ends its stdout
+      },
+    });
+
+    const controller = new AbortController();
+    const events: AgentEvent[] = [];
+    const pump = (async () => {
+      for await (const ev of runCoordinator("X", "ask", spawn, controller.signal)) events.push(ev);
+    })();
+
+    await new Promise((r) => setTimeout(r, 10)); // let the first event flush
+    controller.abort();
+    await pump; // must terminate, not hang
+
+    expect(killed).toBe(true);
+    expect(events[0]).toEqual({ kind: "text", text: "starting" });
+    // cancelled run: no misleading synthetic "done" appended after the abort
+    expect(events.some((e) => e.kind === "done")).toBe(false);
+  });
 });

@@ -15,6 +15,9 @@ export interface SpawnedProcess {
   // Collected stderr, resolved on close. Used to surface startup/auth crashes in the error message.
   // Optional so lightweight fakes (tests) can omit it.
   stderr?: Promise<string>;
+  // Terminate the process. Called when the consumer aborts (e.g. the SSE client disconnects) so a
+  // headless `claude` run does not keep billing after nobody is listening. Optional for fakes.
+  kill?: () => void;
 }
 
 // Injectable spawner. Default implementation shells out to the real `claude` binary.

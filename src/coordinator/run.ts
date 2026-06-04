@@ -36,7 +36,12 @@ const defaultSpawn: Spawner = (cmd, args): SpawnedProcess => {
     child.on("error", () => resolve(1));
   });
   const stderr = exitCode.then(() => stderrBuf);
-  return { stdout: child.stdout as AsyncIterable<string>, exitCode, stderr };
+  return {
+    stdout: child.stdout as AsyncIterable<string>,
+    exitCode,
+    stderr,
+    kill: () => child.kill(),
+  };
 };
 
 // Spawn the coordinator and yield AgentEvents. Buffers stdout chunks into whole lines before parsing.
@@ -44,43 +49,57 @@ export async function* runCoordinator(
   company: string,
   ask: string,
   spawn: Spawner = defaultSpawn,
+  signal?: AbortSignal,
 ): AsyncIterable<AgentEvent> {
   const prompt = buildCoordinatorPrompt(company, ask);
   const proc = spawn(BIN, coordinatorArgs(prompt));
 
+  // If the consumer aborts (SSE client disconnects), kill the child so the headless run stops billing.
+  const onAbort = () => proc.kill?.();
+  if (signal) {
+    if (signal.aborted) proc.kill?.();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  }
+
   let buf = "";
   let sawTerminal = false; // a done or error already emitted
 
-  for await (const chunk of proc.stdout) {
-    buf += chunk;
-    let nl: number;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl);
-      buf = buf.slice(nl + 1);
-      const ev = parseLine(line);
-      if (ev) {
-        if (ev.kind === "done" || ev.kind === "error") sawTerminal = true;
-        yield ev;
+  try {
+    for await (const chunk of proc.stdout) {
+      buf += chunk;
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        const ev = parseLine(line);
+        if (ev) {
+          if (ev.kind === "done" || ev.kind === "error") sawTerminal = true;
+          yield ev;
+        }
       }
     }
-  }
-  // flush any trailing partial line
-  const last = parseLine(buf);
-  if (last) {
-    if (last.kind === "done" || last.kind === "error") sawTerminal = true;
-    yield last;
-  }
-
-  const code = await proc.exitCode;
-  if (!sawTerminal) {
-    if (code === 0) {
-      yield { kind: "done", ok: true, summary: "" };
-    } else {
-      const detail = (await proc.stderr)?.trim();
-      const message = detail
-        ? `coordinator exited with code ${code}: ${detail}`
-        : `coordinator exited with code ${code}`;
-      yield { kind: "error", message };
+    // flush any trailing partial line
+    const last = parseLine(buf);
+    if (last) {
+      if (last.kind === "done" || last.kind === "error") sawTerminal = true;
+      yield last;
     }
+
+    const code = await proc.exitCode;
+    // Cancelled run: the consumer is gone — don't append a misleading synthetic terminal event.
+    if (signal?.aborted) return;
+    if (!sawTerminal) {
+      if (code === 0) {
+        yield { kind: "done", ok: true, summary: "" };
+      } else {
+        const detail = (await proc.stderr)?.trim();
+        const message = detail
+          ? `coordinator exited with code ${code}: ${detail}`
+          : `coordinator exited with code ${code}`;
+        yield { kind: "error", message };
+      }
+    }
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
   }
 }
