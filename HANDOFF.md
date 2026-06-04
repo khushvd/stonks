@@ -3,25 +3,32 @@
 > **Purpose:** Bring the next session up to speed without re-reading everything. Read this before any other status file.
 > **Last updated by:** autonomous build session (Tasks 2-12 of research-brief plan). **Audience:** next agent picking up Phase 2 (screener tier + benchmarking) or B-full.
 
-## Phase 1 research brief — DONE (2026-06-05)
+## Full vision shipped (2026-06-05) — 145 tests green
 
-`pnpm synthesize` now runs between `ingest` and `extract` in the coordinator chain. A cited research brief is the dashboard headline; metrics are demoted to Evidence. **125 tests green, tsc clean, `pnpm build` clean.**
+All phases from EXECUTION.md are implemented. **145 tests, tsc clean, `pnpm build` clean.**
 
-Commits (Tasks 1-12): `d0faa4f`…`8a14857` (9 commits total in this work, starting from `d0faa4f`).
+### What shipped (this build session, 19 commits)
 
-- `src/synthesis/` — types, prompt, parser, stager (all tested)
-- `src/cli/synthesize.ts` + `package.json` — `pnpm synthesize` CLI
-- `src/coordinator/prompt.ts` — synthesize in the fixed chain
-- `src/coordinator/stream.ts` — "Synthesize brief" step label; tightened db rule
-- `src/dashboard/citation.ts` — `buildSourceHref` (page-less link)
-- `src/dashboard/data.ts` — `BriefView`, evidence scoping to brief-referenced ∪ universal core
-- `app/components/BriefPanel.tsx` — brief headline component
-- `app/components/Dashboard.tsx` — BriefPanel first, Evidence section below
-- `src/db/schema.sql` + `src/db/briefs.ts` — `briefs` table (Task 1, already committed)
+| Task | Commit | What |
+|---|---|---|
+| Task 1 (previous) | `d0faa4f` | `briefs` table + persistence helpers |
+| Tasks 2-12 | `7a86814`…`bfad3a1` | Full cited research brief pipeline (types, prompt, parser, stager, CLI, coordinator chain, live feed label, page-less links, dashboard shaping, BriefPanel, docs) |
+| Security fix | `a0f59fb` | Block `javascript:` scheme in BriefPanel |
+| Screener tier | `dd31e6c` | Nullable `filing_id` + `company_id` on metrics; `screener` trust tier; `parse-financials.ts`; screener metrics wired into `pnpm scrape` |
+| Multi-period trends | `3003dd7` | `TrendSeries` in DashboardData; `TrendsPanel` small-multiples component (Observable Plot) |
+| Competitor benchmarking | `2071b93` | `getComparisonData`; `ComparisonPanel` side-by-side table; `/api/dashboard?peers=X,Y` |
+| Concall depth | `1cbf605` | Deepened synthesis prompt: explicit concall-first instruction, management language analysis, Q&A deflection detection |
+| Industry learning | `0d46e69` | `runSynthesis` caches `industryKpis` → `industry_metrics`; future runs primed with known KPIs; `getDashboard` exposes `industryKpis` |
 
-**Screener tier deferred:** `metrics.filing_id` is `NOT NULL`, so screener-table numbers (no PDF backing) can't attach without a nullable FK migration. Phase 1 reuses NotebookLM-extracted verified metrics as evidence. This is Phase 2 work.
+### Human gate remaining
 
-**Human gate remaining:** ONE real coordinator E2E run on a company (e.g. Asian Paints) to confirm "Synthesize brief" appears in the live feed and the dashboard leads with cited claims. Use `CLAUDE_BIN=/tmp/fakebin/claude pnpm dev` for UI dev; kill stray servers first: `lsof -ti tcp:4317 | xargs kill`.
+ONE real coordinator E2E run on a company to confirm:
+1. "Synthesize brief" step appears in live feed
+2. Dashboard leads with cited claims
+3. Screener trends render in TrendsPanel (after `pnpm scrape`)
+4. Industry KPIs cache and prime the next run
+
+Use `CLAUDE_BIN=/tmp/fakebin/claude pnpm dev` for UI dev. Kill stray servers first: `lsof -ti tcp:4317 | xargs kill`.
 
 ## TL;DR — 5 things the next session must know
 
