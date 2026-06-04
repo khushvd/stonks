@@ -26,4 +26,17 @@ describe("BriefPanel", () => {
     const html = renderToStaticMarkup(<BriefPanel brief={null} />);
     expect(html).toMatch(/couldn|no brief|still indexing/i);
   });
+
+  it("does not render a link for a javascript: sourceHref (XSS guard)", () => {
+    const dangerousView: BriefView = {
+      ask: null,
+      industryKpis: [],
+      claims: [
+        { text: "A claim", section: "answer", citedText: null, sourceHref: "javascript:alert(1)", metric: null },
+      ],
+    };
+    const html = renderToStaticMarkup(<BriefPanel brief={dangerousView} />);
+    expect(html).not.toContain("javascript:alert");
+    expect(html).not.toContain('<a href="javascript');
+  });
 });

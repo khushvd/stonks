@@ -10,6 +10,8 @@ const SECTION_TITLES: Record<BriefClaimView["section"], string> = {
 const SECTION_ORDER: BriefClaimView["section"][] = ["answer", "guidance", "drivers", "risks", "industry_kpi"];
 
 function ClaimLine({ claim }: { claim: BriefClaimView }) {
+  // Only allow relative paths and http(s) URLs — block javascript: and other dangerous schemes.
+  const safeHref = claim.sourceHref && /^(https?:|\/)/i.test(claim.sourceHref) ? claim.sourceHref : null;
   return (
     <li style={{ marginBottom: 8, lineHeight: 1.45 }}>
       <span>{claim.text}</span>
@@ -20,8 +22,8 @@ function ClaimLine({ claim }: { claim: BriefClaimView }) {
           {claim.metric.badge.label}
         </span>
       )}
-      {claim.sourceHref && (
-        <a href={claim.sourceHref} target="_blank" rel="noreferrer" style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}>
+      {safeHref && (
+        <a href={safeHref} target="_blank" rel="noreferrer" style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}>
           source
         </a>
       )}
