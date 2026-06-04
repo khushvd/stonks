@@ -19,6 +19,15 @@ describe("stepLabelFor", () => {
   it("returns null for non-pipeline commands", () => {
     expect(stepLabelFor("ls -la")).toBeNull();
   });
+
+  it("labels the synthesize step", () => {
+    expect(stepLabelFor("pnpm synthesize \"Acme\" \"q\"")).toBe("Synthesize brief");
+  });
+
+  it("labels only `db summary` as Summarize, not other db subcommands", () => {
+    expect(stepLabelFor("pnpm db summary")).toBe("Summarize");
+    expect(stepLabelFor("pnpm db stage foo")).toBeNull();
+  });
 });
 
 describe("parseLine", () => {

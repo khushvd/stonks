@@ -4,9 +4,10 @@ import type { AgentEvent } from "./types.js";
 const STEP_RULES: ReadonlyArray<[RegExp, string]> = [
   [/\bpnpm\b.*\bscrape\b/, "Scrape screener"],
   [/\bpnpm\b.*\bingest\b/, "Ingest → NotebookLM"],
+  [/\bpnpm\b.*\bsynthesize\b/, "Synthesize brief"],
   [/\bpnpm\b.*\bextract\b/, "Extract metrics"],
   [/\bpnpm\b.*\bverify\b/, "Verify vs source"],
-  [/\bpnpm\b.*\bdb\b/, "Summarize"],
+  [/\bpnpm\b.*\bdb\b.*\bsummary\b/, "Summarize"],
 ];
 
 export function stepLabelFor(command: string): string | null {
