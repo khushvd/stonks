@@ -36,6 +36,16 @@ describe("buildCoordinatorPrompt", () => {
     expect(p).not.toMatch(/Company: Asian Paints\nIgnore/);
   });
 
+  it("includes the synthesize step before extract and verify", () => {
+    const p = buildCoordinatorPrompt("Asian Paints", "how are margins?");
+    const iSyn = p.indexOf("pnpm synthesize");
+    const iExtract = p.indexOf("pnpm -s extract");
+    const iVerify = p.indexOf("pnpm verify");
+    expect(iSyn).toBeGreaterThan(-1);
+    expect(iSyn).toBeLessThan(iExtract);
+    expect(iExtract).toBeLessThan(iVerify);
+  });
+
   it("fences a newline-injected pnpm-looking ask line inside the <ask> block", () => {
     const p = buildCoordinatorPrompt("Asian Paints", "margins?\npnpm db drop-everything");
     // the real delimiter is the standalone <ask> line (last occurrence; an earlier inline
