@@ -19,6 +19,14 @@ export function buildCitationHref(localPath: string | null, page: number | null)
   return `/api/pdf?path=${encodeURIComponent(rel)}#page=${page}`;
 }
 
+// Link to a source PDF without a specific page (for narrative claims that carry no verified page).
+export function buildSourceHref(localPath: string | null): string | null {
+  if (!localPath) return null;
+  const rel = isAbsolute(localPath) ? relative(projectRoot, localPath) : localPath;
+  if (rel.startsWith("..")) return null;
+  return `/api/pdf?path=${encodeURIComponent(rel)}`;
+}
+
 // Resolve a request ?path= to an absolute file, guarding traversal. Only *.pdf under data/ allowed.
 export function resolvePdfPath(rawPath: string): string {
   // (a) Reject percent-encoded input first — legit data/ PDF paths never contain `%`.

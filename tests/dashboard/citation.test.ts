@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildCitationHref, resolvePdfPath } from "../../src/dashboard/citation.js";
+import { buildCitationHref, resolvePdfPath, buildSourceHref } from "../../src/dashboard/citation.js";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -18,6 +18,16 @@ describe("buildCitationHref", () => {
   });
   it("returns null for an absolute path that resolves outside the project root", () => {
     expect(buildCitationHref("/etc/passwd.pdf", 1)).toBeNull();
+  });
+});
+
+describe("buildSourceHref", () => {
+  it("builds a page-less href for a data/ PDF", () => {
+    expect(buildSourceHref("data/acme/q4.pdf")).toBe("/api/pdf?path=data%2Facme%2Fq4.pdf");
+  });
+
+  it("returns null for a missing path", () => {
+    expect(buildSourceHref(null)).toBeNull();
   });
 });
 
