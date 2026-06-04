@@ -4,6 +4,7 @@ import { getCompany } from "../db/companies.js";
 import { listFilings } from "../db/filings.js";
 import { listMetrics, listStaging } from "../db/metrics.js";
 import { getLatestBrief } from "../db/briefs.js";
+import { getIndustryMetrics } from "../db/industry-metrics.js";
 import { trustBadge, type Badge } from "./trust.js";
 import { buildCitationHref, buildSourceHref } from "./citation.js";
 import { UNIVERSAL_BASE } from "../extract/canonical.js";
@@ -63,6 +64,7 @@ export interface DashboardData {
   filings: Filing[];
   brief: BriefView | null;
   trends: TrendSeries[];
+  industryKpis: string[]; // cached KPIs for this company's industry (from industry_metrics table)
 }
 
 export function getDashboard(db: Database.Database, companyName: string): DashboardData | null {
@@ -178,5 +180,10 @@ export function getDashboard(db: Database.Database, companyName: string): Dashbo
   // Keep only series with ≥2 points (meaningful trend), sorted by metric name.
   const trends = Array.from(trendsByName.values()).filter((s) => s.points.length >= 2);
 
-  return { company, integrity, metrics, rejects, filings, brief, trends };
+  // --- Industry KPIs from cache ---
+  const industryKpis = company.industry
+    ? getIndustryMetrics(db, company.industry).map((m) => m.metric_key)
+    : [];
+
+  return { company, integrity, metrics, rejects, filings, brief, trends, industryKpis };
 }

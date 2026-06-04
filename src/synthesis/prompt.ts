@@ -2,7 +2,12 @@
 // ONLY the ingested sources, return a fixed analyst frame, and emit a strict JSON object so the
 // parser is deterministic. Untrusted inputs (company, ask) are guarded the same way the coordinator
 // prompt guards them.
-export function buildSynthesisPrompt(company: string, ask: string | null, industry: string | null): string {
+export function buildSynthesisPrompt(
+  company: string,
+  ask: string | null,
+  industry: string | null,
+  knownKpis: string[] = [],
+): string {
   if (/^-/.test(company.trim())) {
     throw new Error(`Refusing unsafe company name starting with "-": ${company}`);
   }
@@ -12,10 +17,13 @@ export function buildSynthesisPrompt(company: string, ask: string | null, indust
     .replace(/<\/?ask>/gi, "")
     .trim();
   const industryLine = industry ? `Sector/industry: ${industry.replace(/[\r\n]+/g, " ")}` : "Sector/industry: unknown — infer it from the sources.";
+  const kpiHint = knownKpis.length > 0
+    ? `Previously identified KPIs for this industry: ${knownKpis.slice(0, 10).join(", ")}. Report their current values in industry_kpi claims.`
+    : "";
 
   return [
     `You are an equity research analyst studying ${safeCompany}. Use ONLY the attached sources`,
-    `(annual reports, concall transcripts, investor presentations). ${industryLine}`,
+    `(annual reports, concall transcripts, investor presentations). ${industryLine}${kpiHint ? ` ${kpiHint}` : ""}`,
     ``,
     `Answer the user's ASK (below) and cover this analyst frame. For each section, extract from`,
     `CONCALL TRANSCRIPTS first (management's own words are the primary source), then corroborate`,
