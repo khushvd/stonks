@@ -20,3 +20,17 @@ export function insertFiling(
 export function listFilings(db: Database.Database, companyId: number): Filing[] {
   return db.prepare("SELECT * FROM filings WHERE company_id = ? ORDER BY id").all(companyId) as Filing[];
 }
+
+export function setFilingSourceId(db: Database.Database, filingId: number, sourceId: string): void {
+  db.prepare("UPDATE filings SET notebooklm_source_id = ? WHERE id = ?").run(sourceId, filingId);
+}
+
+export function getFilingBySourceId(
+  db: Database.Database,
+  companyId: number,
+  sourceId: string,
+): Filing | undefined {
+  return db
+    .prepare("SELECT * FROM filings WHERE company_id = ? AND notebooklm_source_id = ?")
+    .get(companyId, sourceId) as Filing | undefined;
+}

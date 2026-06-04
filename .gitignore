@@ -2,3 +2,12 @@ node_modules
 dist
 data
 .env
+.DS_Store
+
+# brainstorm visual-companion scratch
+.superpowers/
+
+# next.js
+/.next/
+/out/
+next-env.d.ts

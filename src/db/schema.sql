@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS filings (
   period TEXT,
   source_url TEXT,
   local_path TEXT,
+  notebooklm_source_id TEXT,
   UNIQUE(company_id, type, period, source_url)
 );
 
@@ -22,7 +23,8 @@ CREATE TABLE IF NOT EXISTS metrics (
   value REAL NOT NULL,
   unit TEXT,
   period TEXT,
-  source_page INTEGER
+  source_page INTEGER,
+  trust TEXT NOT NULL DEFAULT 'verified' CHECK(trust IN ('verified','notebooklm-only'))
 );
 
 CREATE TABLE IF NOT EXISTS metrics_staging (
@@ -33,6 +35,23 @@ CREATE TABLE IF NOT EXISTS metrics_staging (
   unit TEXT,
   period TEXT,
   source_page INTEGER,
+  excerpt TEXT,
+  source_url TEXT,
+  notebooklm_source_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','rejected')),
   reject_reason TEXT
+);
+
+CREATE TABLE IF NOT EXISTS notebooks (
+  company_id INTEGER PRIMARY KEY REFERENCES companies(id),
+  notebook_url TEXT,
+  notebook_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS industry_metrics (
+  industry TEXT NOT NULL,
+  metric_key TEXT NOT NULL,
+  label TEXT,
+  source TEXT NOT NULL CHECK(source IN ('notebooklm','sonnet')),
+  PRIMARY KEY (industry, metric_key)
 );

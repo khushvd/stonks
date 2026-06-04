@@ -4,25 +4,37 @@
   "description": "",
   "type": "module",
   "scripts": {
+    "dev": "next dev -p 4317",
+    "build": "next build",
+    "start": "next start -p 4317",
     "test": "vitest run",
     "scrape": "tsx src/cli/scrape-company.ts",
+    "ingest": "tsx src/cli/ingest.ts",
+    "extract": "tsx src/cli/extract.ts",
     "pdf-text": "tsx src/cli/pdf-text.ts",
-    "db": "tsx src/cli/db.ts"
+    "db": "tsx src/cli/db.ts",
+    "verify": "tsx src/cli/verify.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
+    "@observablehq/plot": "^0.6.17",
     "better-sqlite3": "^12.10.0",
     "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
+    "next": "^15.5.19",
     "pdfjs-dist": "^6.0.227",
-    "playwright": "^1.60.0"
+    "playwright": "^1.60.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.1",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
