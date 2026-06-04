@@ -17,9 +17,10 @@ Full design: `docs/superpowers/specs/2026-06-03-investment-analysis-agents-desig
 
 ## Architecture (one-liner)
 
-Next.js app (localhost) → spawns one `claude -p` Coordinator → Coordinator uses native Task
-dispatch to run Extractor (Haiku), Verifier, Dashboarder, Teacher (Sonnet). Data: SQLite
-(structured metrics) + NotebookLM (document corpus, via the `notebooklm` CLI) + filesystem (raw PDFs).
+Next.js app (localhost:4317) → `/api/run` spawns one `claude -p` Coordinator → Coordinator runs a
+FIXED pnpm chain (scrape → ingest → extract → verify → db summary) via Bash, streaming stream-json
+back over SSE → read-only trust dashboard. Data: SQLite (structured metrics) + NotebookLM (document
+corpus, via the `notebooklm` CLI) + filesystem (raw PDFs).
 
 ## Stack
 
@@ -32,16 +33,24 @@ source rechecks. Playwright for scraping. Vitest + tsx (TypeScript ESM). Agents 
 ```bash
 pnpm test                       # vitest run — full suite (must stay green before any commit)
 pnpm exec tsc --noEmit          # typecheck
+pnpm build                      # next build (must pass before any commit touching app/)
+pnpm dev                        # next dev on :4317  (app UI)
 pnpm scrape "<Company>"         # Playwright → screener.in → PDFs + filings rows
 pnpm ingest "<Company>"         # upload filing PDFs into the company's NotebookLM notebook (idempotent)
 pnpm -s extract "<Company>" "<ask>"   # build the extractor payload (use -s: pnpm banner pollutes JSON stdout)
 pnpm verify                     # deterministic pdfjs integrity gate over staged metrics
 pnpm db <subcommand>            # db utilities incl. `select-citation` (deterministic citation picker)
+open scripts/stonks.command     # double-click launcher: preflight → build → start → open browser
 ```
 
 The extractor agent calls `notebooklm ask ... --json` directly (proposer); `pnpm verify`
 disposes against the source PDF. All `notebooklm`/`pnpm` calls are allow-listed in
 `.claude/settings.local.json`.
+
+**Dev hazard:** hitting `/api/run` (the Run button) spawns a REAL, billable `claude -p` run that
+mutates `data/stonks.db` (scrape + promote). When developing the UI, point it at a fake binary:
+`CLAUDE_BIN=/tmp/fakebin/claude pnpm dev` (a stub that emits a couple of stream-json lines). Kill
+stray dev servers on the fixed port first: `lsof -ti tcp:4317 | xargs kill`.
 
 ## Code map
 
@@ -50,6 +59,14 @@ disposes against the source PDF. All `notebooklm`/`pnpm` calls are allow-listed 
 - `src/verifier/` — `match.ts` (`extractNumbers` tokenizer + `pageHasValue`), `verify.ts` (source-scoped gate)
 - `src/db/` — schema + per-table helpers; `migrate.ts` guarded ALTERs
 - `src/scraper/`, `src/pdf/`, `src/extract/`, `src/cli/` — Playwright, pdfjs text, canonical metric list, CLI entrypoints
+- `src/coordinator/` — `stream.ts` (pure stream-json→`AgentEvent` parser), `prompt.ts` (injection-guarded
+  fixed-chain prompt builder), `run.ts` (injectable `Spawner`, AbortSignal→kill so a disconnect never
+  orphans a billable run), `types.ts`
+- `src/dashboard/` — `trust.ts` (badge/integrity-chip presentation), `citation.ts` (traversal-hardened
+  PDF path resolver + `#page=N` href), `data.ts` (`getDashboard` shaping over `src/db`, NO raw SQL)
+- `app/` — Next.js App Router. `api/{dashboard,pdf,run}/route.ts` (all `runtime="nodejs"`; `run` is the
+  SSE coordinator stream), `components/*.tsx` (trust dashboard, control rail, live progress feed,
+  margin chart), `page.tsx` (Layout-A two-pane). `scripts/stonks.command` = the launcher.
 
 ## Build phases
 
@@ -62,7 +79,14 @@ disposes against the source PDF. All `notebooklm`/`pnpm` calls are allow-listed 
    - **Extraction + trust-aware verifier via the `notebooklm` CLI: DONE (2026-06-04).** Ingestor +
      Extractor agents, source-scoped verifier, verified/notebooklm-only/reject trust model — proven
      E2E on Asian Paints. See `docs/superpowers/runs/2026-06-04-cli-pivot-asianpaint.md`.
-   - **Remaining:** Next.js app + streaming `claude -p` coordinator + Observable Plot dashboards.
+   - **B1 web app: DONE (2026-06-05), merged to `main`.** Next.js app (`app/`), streaming `claude -p`
+     coordinator over SSE (`src/coordinator/`), trust-aware read-only dashboard + ≤1 Observable Plot
+     chart (`src/dashboard/`, `app/components/`), double-clickable launcher. Single-turn `{company,
+     ask}` → Run → live feed → dashboard. 103 tests green; manual golden-path E2E verified.
+     Spec: `docs/superpowers/specs/2026-06-04-stonks-b1-app-design.md`; plan: `.../plans/2026-06-04-stonks-b1-app.md`.
+   - **Next: B-full** — multi-turn conversational chat that refines/re-asks/adds companies and surfaces
+     NotebookLM cross-document narrative synthesis. B1 built the rails (`ask` field, coordinator, SSE).
+     Not started; needs its own brainstorm→spec→plan.
 3. **Teacher + polish:** on-demand Teacher agent (industry metrics tutoring + brainstorm), refinement.
 
 ### Phase 2 design decisions (locked 2026-06-03)
