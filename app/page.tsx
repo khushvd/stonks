@@ -9,7 +9,9 @@ export default function Page() {
 
   const refresh = useCallback(async (company: string) => {
     const res = await fetch(`/api/dashboard?company=${encodeURIComponent(company)}`);
-    if (res.ok) setData((await res.json()) as DashboardData);
+    // Clear on a failed fetch (e.g. 404 from a typo) so a stale company's data is never shown as
+    // if it belonged to the one just requested. The empty-state copy renders instead.
+    setData(res.ok ? ((await res.json()) as DashboardData) : null);
   }, []);
 
   return (

@@ -4,7 +4,9 @@ export function buildCoordinatorPrompt(company: string, ask: string): string {
   if (/^-/.test(company.trim())) {
     throw new Error(`Refusing unsafe company name starting with "-": ${company}`);
   }
-  const safeCompany = company.trim();
+  // Flatten newlines so a company name can't smuggle a second line of "instructions" into the prose
+  // (the pnpm arg lines are already JSON.stringify-escaped; this guards the human-readable header line).
+  const safeCompany = company.trim().replace(/[\r\n]+/g, " ");
   // Fence the ask so it is unambiguously data, never an instruction the model should obey:
   // neutralise code fences and any attempt to close/forge the <ask> delimiter from inside the ask.
   const fencedAsk = ask
