@@ -1,0 +1,16 @@
+:root {
+  --bg: #0d0d0f;
+  --panel: #16161a;
+  --border: #2a2a30;
+  --text: #e6e6ea;
+  --muted: #8a8a93;
+  --ok: #00cc33;
+  --warn: #ffbb33;
+  --bad: #ff5555;
+  --accent: #4a7dff;
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+button { font: inherit; cursor: pointer; }
+a { color: var(--accent); }
