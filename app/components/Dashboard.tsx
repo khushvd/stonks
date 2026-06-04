@@ -4,6 +4,7 @@ import { BriefPanel } from "./BriefPanel.js";
 import { IntegrityTile } from "./IntegrityTile.js";
 import { MetricsTable } from "./MetricsTable.js";
 import { MarginChart } from "./MarginChart.js";
+import { TrendsPanel } from "./TrendsPanel.js";
 import { RejectsPanel } from "./RejectsPanel.js";
 
 export function Dashboard({ data }: { data: DashboardData | null }) {
@@ -18,6 +19,7 @@ export function Dashboard({ data }: { data: DashboardData | null }) {
       <IntegrityTile summary={data.integrity} />
       <MetricsTable rows={data.metrics} />
       <MarginChart rows={data.metrics} />
+      <TrendsPanel trends={data.trends} />
       <RejectsPanel rows={data.rejects} />
     </div>
   );

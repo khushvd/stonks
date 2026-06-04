@@ -44,6 +44,17 @@ export interface BriefView {
   industryKpis: string[];
 }
 
+export interface TrendPoint {
+  period: string;
+  value: number;
+}
+
+export interface TrendSeries {
+  name: string;
+  unit: string | null;
+  points: TrendPoint[];
+}
+
 export interface DashboardData {
   company: Company;
   integrity: IntegritySummary;
@@ -51,6 +62,7 @@ export interface DashboardData {
   rejects: RejectRow[];
   filings: Filing[];
   brief: BriefView | null;
+  trends: TrendSeries[];
 }
 
 export function getDashboard(db: Database.Database, companyName: string): DashboardData | null {
@@ -151,5 +163,20 @@ export function getDashboard(db: Database.Database, companyName: string): Dashbo
   const briefNames = new Set((brief?.claims ?? []).map((c) => c.metric?.name).filter((n): n is string => !!n));
   const metrics = allMetrics.filter((m) => universalNames.has(m.name) || briefNames.has(m.name));
 
-  return { company, integrity, metrics, rejects, filings, brief };
+  // --- Multi-period trend series from screener metrics ---
+  // Group screener-trust metrics by name; each group becomes a TrendSeries.
+  const screenerMetrics = allMetrics.filter((m) => m.trust === "screener" && m.period);
+  const trendsByName = new Map<string, TrendSeries>();
+  for (const m of screenerMetrics) {
+    let series = trendsByName.get(m.name);
+    if (!series) {
+      series = { name: m.name, unit: m.unit, points: [] };
+      trendsByName.set(m.name, series);
+    }
+    series.points.push({ period: m.period as string, value: m.value });
+  }
+  // Keep only series with ≥2 points (meaningful trend), sorted by metric name.
+  const trends = Array.from(trendsByName.values()).filter((s) => s.points.length >= 2);
+
+  return { company, integrity, metrics, rejects, filings, brief, trends };
 }
