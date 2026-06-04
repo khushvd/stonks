@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 import type { Company, Filing, IntegritySummary } from "../types.js";
 import { getCompany } from "../db/companies.js";
 import { listFilings } from "../db/filings.js";
-import { listMetrics, listStaging, integritySummary } from "../db/metrics.js";
+import { listMetrics, listStaging } from "../db/metrics.js";
 import { trustBadge, type Badge } from "./trust.js";
 import { buildCitationHref } from "./citation.js";
 
@@ -70,5 +70,15 @@ export function getDashboard(db: Database.Database, companyName: string): Dashbo
       excerpt: s.excerpt,
     }));
 
-  return { company, integrity: integritySummary(db), metrics, rejects, filings };
+  // Integrity is computed from the already-company-scoped data, NOT the global helper
+  // (which counts across all companies and would leak other companies' counts into this tile).
+  const pending = listStaging(db, "pending").filter((s) => byId.has(s.filing_id)).length;
+  const integrity: IntegritySummary = {
+    verified: metrics.filter((m) => m.trust === "verified").length,
+    notebooklmOnly: metrics.filter((m) => m.trust === "notebooklm-only").length,
+    pending,
+    rejected: rejects.length,
+  };
+
+  return { company, integrity, metrics, rejects, filings };
 }

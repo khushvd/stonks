@@ -24,6 +24,23 @@ function seed() {
   // a rejected metric
   const r = stageMetric(db, { filing_id: filingId, name: "pat", value: 9999, unit: "cr", period: "Q4FY26", source_page: 28, excerpt: "not found", source_url: null });
   rejectMetric(db, r, "value not present on cited page");
+
+  // a SECOND company with its own metrics — must NOT bleed into Asian Paints' integrity tile
+  const otherId = upsertCompany(db, { name: "Berger Paints", ticker: "BERGEPAINT", industry: "Paints" });
+  const otherFiling = insertFiling(db, {
+    company_id: otherId,
+    type: "presentation",
+    period: "Q4FY26",
+    source_url: "https://example.com/b.pdf",
+    local_path: "data/berger/presentation-0.pdf",
+  });
+  const ov = stageMetric(db, { filing_id: otherFiling, name: "revenue", value: 3000, unit: "cr", period: "Q4FY26", source_page: 5, excerpt: "Rev 3,000", source_url: null });
+  promoteMetric(db, ov, "verified");
+  // left pending — must not count toward Asian Paints' pending
+  stageMetric(db, { filing_id: otherFiling, name: "ebitda", value: 500, unit: "cr", period: "Q4FY26", source_page: 6, excerpt: "pending", source_url: null });
+  const orj = stageMetric(db, { filing_id: otherFiling, name: "pat", value: 1, unit: "cr", period: "Q4FY26", source_page: 7, excerpt: "bad", source_url: null });
+  rejectMetric(db, orj, "other-company reject");
+
   return { db };
 }
 
@@ -33,6 +50,7 @@ describe("getDashboard", () => {
     const d = getDashboard(db, "Asian Paints");
     expect(d).not.toBeNull();
     expect(d!.company.name).toBe("Asian Paints");
+    // scoped to Asian Paints only — Berger's 1 verified / 1 pending / 1 rejected must not leak in
     expect(d!.integrity).toEqual({ verified: 1, notebooklmOnly: 1, pending: 0, rejected: 1 });
 
     const rev = d!.metrics.find((m) => m.name === "revenue")!;
