@@ -2,6 +2,7 @@ import type { DashboardData } from "../../src/dashboard/data.js";
 import { CompanyHeader } from "./CompanyHeader.js";
 import { IntegrityTile } from "./IntegrityTile.js";
 import { MetricsTable } from "./MetricsTable.js";
+import { MarginChart } from "./MarginChart.js";
 import { RejectsPanel } from "./RejectsPanel.js";
 
 export function Dashboard({ data }: { data: DashboardData | null }) {
@@ -13,6 +14,7 @@ export function Dashboard({ data }: { data: DashboardData | null }) {
       <CompanyHeader company={data.company} />
       <IntegrityTile summary={data.integrity} />
       <MetricsTable rows={data.metrics} />
+      <MarginChart rows={data.metrics} />
       <RejectsPanel rows={data.rejects} />
     </div>
   );
