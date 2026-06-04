@@ -1,13 +1,15 @@
 import type { DashboardData } from "../../src/dashboard/data.js";
+import type { ComparisonData } from "../../src/dashboard/comparison.js";
 import { CompanyHeader } from "./CompanyHeader.js";
 import { BriefPanel } from "./BriefPanel.js";
 import { IntegrityTile } from "./IntegrityTile.js";
 import { MetricsTable } from "./MetricsTable.js";
 import { MarginChart } from "./MarginChart.js";
 import { TrendsPanel } from "./TrendsPanel.js";
+import { ComparisonPanel } from "./ComparisonPanel.js";
 import { RejectsPanel } from "./RejectsPanel.js";
 
-export function Dashboard({ data }: { data: DashboardData | null }) {
+export function Dashboard({ data, comparison }: { data: DashboardData | null; comparison?: ComparisonData | null }) {
   if (!data) {
     return <p style={{ color: "var(--muted)" }}>Run an analysis to populate the dashboard.</p>;
   }
@@ -20,6 +22,7 @@ export function Dashboard({ data }: { data: DashboardData | null }) {
       <MetricsTable rows={data.metrics} />
       <MarginChart rows={data.metrics} />
       <TrendsPanel trends={data.trends} />
+      {comparison && <ComparisonPanel data={comparison} />}
       <RejectsPanel rows={data.rejects} />
     </div>
   );
