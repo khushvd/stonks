@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseLine, stepLabelFor } from "../../src/coordinator/stream.js";
+import { parseCodexLine, parseLine, stepLabelFor } from "../../src/coordinator/stream.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name: string) =>
@@ -108,5 +108,51 @@ describe("parseLine", () => {
       if (ev?.kind === "done") sawDone = true;
     }
     expect(sawDone).toBe(true);
+  });
+});
+
+describe("parseCodexLine", () => {
+  it("parses a pipeline command execution into a step event", () => {
+    const line = JSON.stringify({
+      type: "item.started",
+      item: { id: "item_1", type: "command_execution", command: "pnpm verify", status: "in_progress" },
+    });
+    expect(parseCodexLine(line)).toEqual({ kind: "step", label: "Verify vs source" });
+  });
+
+  it("parses a non-pipeline command execution into a tool event", () => {
+    const line = JSON.stringify({
+      type: "item.started",
+      item: { id: "item_1", type: "command_execution", command: "ls", status: "in_progress" },
+    });
+    expect(parseCodexLine(line)).toEqual({ kind: "tool", name: "command", summary: "ls" });
+  });
+
+  it("parses a completed agent message into text", () => {
+    const line = JSON.stringify({
+      type: "item.completed",
+      item: { id: "item_2", type: "agent_message", text: "3 verified metrics." },
+    });
+    expect(parseCodexLine(line)).toEqual({ kind: "text", text: "3 verified metrics." });
+  });
+
+  it("parses successful and failed turns into terminal events", () => {
+    expect(parseCodexLine(JSON.stringify({ type: "turn.completed" }))).toEqual({
+      kind: "done",
+      ok: true,
+      summary: "",
+    });
+    expect(parseCodexLine(JSON.stringify({ type: "turn.failed", error: { message: "boom" } }))).toEqual({
+      kind: "error",
+      message: "boom",
+    });
+  });
+
+  it("can be selected through parseLine", () => {
+    const line = JSON.stringify({
+      type: "item.started",
+      item: { type: "command_execution", command: "pnpm synthesize \"X\" \"q\"" },
+    });
+    expect(parseLine(line, "codex")).toEqual({ kind: "step", label: "Synthesize brief" });
   });
 });

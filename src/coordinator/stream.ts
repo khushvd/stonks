@@ -1,4 +1,4 @@
-import type { AgentEvent } from "./types.js";
+import type { AgentEvent, CoordinatorProvider } from "./types.js";
 
 // Map a Bash command to a pipeline step label, or null if it is not a known pipeline step.
 const STEP_RULES: ReadonlyArray<[RegExp, string]> = [
@@ -23,8 +23,25 @@ interface RawLine {
   message?: { content?: Array<{ type?: string; text?: string; name?: string; input?: { command?: string } }> };
 }
 
-// Parse ONE stream-json line into an AgentEvent, or null if the line carries no user-facing progress.
-export function parseLine(line: string): AgentEvent | null {
+interface CodexRawLine {
+  type?: string;
+  message?: string;
+  error?: string | { message?: string };
+  item?: {
+    type?: string;
+    text?: string;
+    command?: string;
+  };
+}
+
+function errorMessage(o: CodexRawLine): string {
+  if (typeof o.error === "string") return o.error;
+  if (o.error?.message) return o.error.message;
+  return o.message ?? "run failed";
+}
+
+// Parse ONE Claude stream-json line into an AgentEvent, or null if the line carries no user-facing progress.
+export function parseClaudeLine(line: string): AgentEvent | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
   let o: RawLine;
@@ -62,4 +79,41 @@ export function parseLine(line: string): AgentEvent | null {
 
   // system (init/hook), user (tool_result), anything else → ignore
   return null;
+}
+
+// Parse ONE Codex `codex exec --json` line into an AgentEvent, or null if it carries no progress.
+export function parseCodexLine(line: string): AgentEvent | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  let o: CodexRawLine;
+  try {
+    o = JSON.parse(trimmed) as CodexRawLine;
+  } catch {
+    return null;
+  }
+
+  if (o.type === "error" || o.type === "turn.failed") {
+    return { kind: "error", message: errorMessage(o) };
+  }
+
+  if (o.type === "turn.completed") {
+    return { kind: "done", ok: true, summary: "" };
+  }
+
+  if (o.type === "item.started" && o.item?.type === "command_execution") {
+    const command = o.item.command ?? "command";
+    const label = stepLabelFor(command);
+    if (label) return { kind: "step", label };
+    return { kind: "tool", name: "command", summary: command };
+  }
+
+  if (o.type === "item.completed" && o.item?.type === "agent_message" && o.item.text) {
+    return { kind: "text", text: o.item.text };
+  }
+
+  return null;
+}
+
+export function parseLine(line: string, provider: CoordinatorProvider = "claude"): AgentEvent | null {
+  return provider === "codex" ? parseCodexLine(line) : parseClaudeLine(line);
 }

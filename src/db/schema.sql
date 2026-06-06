@@ -53,8 +53,22 @@ CREATE TABLE IF NOT EXISTS industry_metrics (
   industry TEXT NOT NULL,
   metric_key TEXT NOT NULL,
   label TEXT,
+  unit TEXT,
+  description TEXT,
+  priority INTEGER,
   source TEXT NOT NULL CHECK(source IN ('notebooklm','sonnet')),
   PRIMARY KEY (industry, metric_key)
+);
+
+CREATE TABLE IF NOT EXISTS company_kpi_status (
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  metric_key TEXT NOT NULL,
+  label TEXT,
+  unit TEXT,
+  status TEXT NOT NULL CHECK(status IN ('missing','failed')),
+  missing_reason TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (company_id, metric_key)
 );
 
 CREATE TABLE IF NOT EXISTS briefs (

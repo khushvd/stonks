@@ -7,6 +7,8 @@ export type AgentEvent =
   | { kind: "error"; message: string } // run failed
   | { kind: "done"; ok: boolean; summary: string }; // run finished
 
+export type CoordinatorProvider = "claude" | "codex";
+
 // A spawned child process, abstracted for testability (mirrors notebooklm's Runner pattern).
 // stdout yields raw string chunks (NOT necessarily line-aligned — the consumer buffers).
 export interface SpawnedProcess {
@@ -20,5 +22,5 @@ export interface SpawnedProcess {
   kill?: () => void;
 }
 
-// Injectable spawner. Default implementation shells out to the real `claude` binary.
+// Injectable spawner. Default implementation shells out to the selected coordinator binary.
 export type Spawner = (cmd: string, args: string[]) => SpawnedProcess;

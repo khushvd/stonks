@@ -5,19 +5,21 @@ import { upsertCompany } from "../db/companies.js";
 import { insertFiling } from "../db/filings.js";
 import { insertScreenerMetric } from "../db/metrics.js";
 import { parseFinancials } from "../scraper/parse-financials.js";
+import { parseScrapeArgs } from "../scraper/company-resolver.js";
 
-// Strip an optional --annual flag (include 200-300pp annual reports on request).
-const rawArgs = process.argv.slice(2);
-const includeAnnualReports = rawArgs.includes("--annual");
-const [ticker, name] = rawArgs.filter((a) => a !== "--annual");
-if (!ticker) {
-  console.error('usage: pnpm scrape <TICKER> [display name] [--annual]');
+let parsed;
+try {
+  parsed = parseScrapeArgs(process.argv.slice(2));
+} catch (e) {
+  console.error((e as Error).message);
+  console.error('usage: pnpm scrape --name "<Company Name>" [--slug SCREENER] [--annual] [--per-type N]');
   process.exit(1);
 }
+const { company, includeAnnualReports, perType } = parsed;
 
 const db = openDb();
-const companyId = upsertCompany(db, { name: name ?? ticker, ticker, industry: null });
-const { links, html } = await scrapeCompany(ticker, { includeAnnualReports });
+const companyId = upsertCompany(db, { name: company.name, ticker: company.slug, industry: null });
+const { links, html } = await scrapeCompany(company.slug, { includeAnnualReports, perType });
 const filings = links.map((l) => ({
   filing_id: insertFiling(db, {
     company_id: companyId, type: l.type, period: l.period,
@@ -38,7 +40,7 @@ for (const mode of ["quarterly", "annual"] as const) {
         value: row.value,
         unit: row.unit,
         period: row.period,
-        source_url: `https://www.screener.in/company/${ticker}/consolidated/`,
+        source_url: `https://www.screener.in/company/${company.slug}/consolidated/`,
       });
       screenerMetricsStored++;
     } catch {

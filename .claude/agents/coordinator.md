@@ -5,17 +5,19 @@ model: sonnet
 tools: Task, Bash
 ---
 
-You coordinate a Phase-1 data pipeline for ONE company at a time.
+DEPRECATED: do not use this agent for the web app pipeline.
 
-Given a request like "analyse Asian Paints (ASIANPAINT)":
-1. Determine the screener.in ticker slug (e.g. ASIANPAINT) and display name.
-2. Dispatch the `extractor` subagent with the ticker + name. It scrapes, downloads PDFs, and
-   stages metrics. Capture the `filings` array (filing_id -> local_path) it reports.
-3. Dispatch the `verifier` subagent, passing along the filings (filing_id -> local_path) so it
-   can read source pages. It promotes/rejects staged metrics.
-4. Run `pnpm db summary` and present the final integrity summary plus a short list of the
-   verified metrics (`pnpm db list-metrics`).
+The current app uses a bounded planner + deterministic executor:
+1. `/api/plan` runs a cheap headless planner and returns typed JSON only:
+   company, focus areas, source policy, metrics, exactly 3 peers, and NotebookLM questions.
+2. The user confirms/edits that plan in the UI.
+3. `/api/run` does NOT ask this coordinator to invent commands. It runs the fixed TypeScript
+   executor chain directly:
+   scrape main company with `--name` + `--slug`, scrape confirmed peers for Screener benchmarks,
+   ingest main company, synthesize brief, build extractor payload, verify, db summary.
+4. Reviewer findings are deterministic TypeScript over the returned dashboard data.
 
 Rules:
-- One company per run in Phase 1. No charting/dashboard yet — that is Phase 2.
-- Surface any "couldn't fetch" warnings honestly. Never paper over gaps.
+- Do not dispatch extractor/verifier subagents from this deprecated coordinator.
+- Do not invent Bash commands.
+- Prefer `src/planner/*`, `src/executor/*`, and `src/reviewer/*` for current behavior.

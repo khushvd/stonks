@@ -16,8 +16,8 @@ describe("industry-metrics cache", () => {
     ], "notebooklm");
     const got = getIndustryMetrics(db, "hotels");
     expect(got).toEqual([
-      { industry: "hotels", metric_key: "occupancy", label: "Occupancy %", source: "notebooklm" },
-      { industry: "hotels", metric_key: "arr", label: "Average Room Rate", source: "notebooklm" },
+      { industry: "hotels", metric_key: "occupancy", label: "Occupancy %", unit: null, description: null, priority: null, source: "notebooklm" },
+      { industry: "hotels", metric_key: "arr", label: "Average Room Rate", unit: null, description: null, priority: null, source: "notebooklm" },
     ]);
   });
 
@@ -26,6 +26,6 @@ describe("industry-metrics cache", () => {
     setIndustryMetrics(db, "cement", [{ metric_key: "realisation", label: "Realisation" }], "notebooklm");
     setIndustryMetrics(db, "cement", [{ metric_key: "logistics_cost", label: "Logistics cost" }], "sonnet");
     const got = getIndustryMetrics(db, "cement");
-    expect(got).toEqual([{ industry: "cement", metric_key: "logistics_cost", label: "Logistics cost", source: "sonnet" }]);
+    expect(got).toEqual([{ industry: "cement", metric_key: "logistics_cost", label: "Logistics cost", unit: null, description: null, priority: null, source: "sonnet" }]);
   });
 });

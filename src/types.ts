@@ -75,7 +75,22 @@ export interface IndustryMetric {
   industry: string;
   metric_key: string;
   label: string | null;
+  unit?: string | null;
+  description?: string | null;
+  priority?: number | null;
   source: "notebooklm" | "sonnet";
+}
+
+export type KpiStatus = "missing" | "failed";
+
+export interface CompanyKpiStatus {
+  company_id: number;
+  metric_key: string;
+  label: string | null;
+  unit: string | null;
+  status: KpiStatus;
+  missing_reason: string | null;
+  updated_at: string;
 }
 
 export interface PageText {

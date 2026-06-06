@@ -1,13 +1,25 @@
 import { spawn as nodeSpawn } from "node:child_process";
-import type { AgentEvent, Spawner, SpawnedProcess } from "./types.js";
+import type { AgentEvent, CoordinatorProvider, Spawner, SpawnedProcess } from "./types.js";
 import { parseLine } from "./stream.js";
 import { buildCoordinatorPrompt } from "./prompt.js";
 
-const BIN = process.env.CLAUDE_BIN ?? "claude";
+type Env = Partial<Record<string, string>>;
 
-// Argv for the headless coordinator. Model is pinned to sonnet (constraint: cheap models only).
+export interface CoordinatorInvocation {
+  provider: CoordinatorProvider;
+  cmd: string;
+  args: string[];
+}
+
+export function providerFromEnv(env: Env = process.env): CoordinatorProvider {
+  const provider = (env.COORDINATOR_PROVIDER ?? "claude").trim().toLowerCase();
+  if (provider === "claude" || provider === "codex") return provider;
+  throw new Error(`Invalid COORDINATOR_PROVIDER "${provider}". Expected "claude" or "codex".`);
+}
+
+// Argv for the Claude headless coordinator. Default model stays sonnet (constraint: cheap models only).
 // acceptEdits lets allow-listed Bash(pnpm:*) run without an interactive prompt in headless mode.
-export function coordinatorArgs(prompt: string): string[] {
+export function coordinatorArgs(prompt: string, model = "sonnet"): string[] {
   return [
     "-p",
     prompt,
@@ -15,13 +27,49 @@ export function coordinatorArgs(prompt: string): string[] {
     "stream-json",
     "--verbose",
     "--model",
-    "sonnet",
+    model,
     "--permission-mode",
     "acceptEdits",
   ];
 }
 
-// Default spawner: shell out to the real `claude` binary, exposing stdout as an async string iterable.
+export function codexCoordinatorArgs(prompt: string, cwd = process.cwd(), model = "gpt-5.4-mini"): string[] {
+  return [
+    "exec",
+    "--json",
+    "--model",
+    model,
+    "--sandbox",
+    "workspace-write",
+    "--ask-for-approval",
+    "never",
+    "--cd",
+    cwd,
+    prompt,
+  ];
+}
+
+export function coordinatorInvocation(
+  prompt: string,
+  env: Env = process.env,
+  cwd = process.cwd(),
+): CoordinatorInvocation {
+  const provider = providerFromEnv(env);
+  if (provider === "codex") {
+    return {
+      provider,
+      cmd: env.CODEX_BIN ?? "codex",
+      args: codexCoordinatorArgs(prompt, cwd, env.COORDINATOR_CODEX_MODEL ?? "gpt-5.4-mini"),
+    };
+  }
+  return {
+    provider,
+    cmd: env.CLAUDE_BIN ?? "claude",
+    args: coordinatorArgs(prompt, env.COORDINATOR_CLAUDE_MODEL ?? "sonnet"),
+  };
+}
+
+// Default spawner: shell out to the selected coordinator binary, exposing stdout as an async string iterable.
 // stderr is captured (not discarded) so an auth/startup crash surfaces a diagnosable error message.
 const defaultSpawn: Spawner = (cmd, args): SpawnedProcess => {
   const child = nodeSpawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -52,7 +100,8 @@ export async function* runCoordinator(
   signal?: AbortSignal,
 ): AsyncIterable<AgentEvent> {
   const prompt = buildCoordinatorPrompt(company, ask);
-  const proc = spawn(BIN, coordinatorArgs(prompt));
+  const invocation = coordinatorInvocation(prompt);
+  const proc = spawn(invocation.cmd, invocation.args);
 
   // If the consumer aborts (SSE client disconnects), kill the child so the headless run stops billing.
   const onAbort = () => proc.kill?.();
@@ -71,7 +120,7 @@ export async function* runCoordinator(
       while ((nl = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
-        const ev = parseLine(line);
+        const ev = parseLine(line, invocation.provider);
         if (ev) {
           if (ev.kind === "done" || ev.kind === "error") sawTerminal = true;
           yield ev;
@@ -79,7 +128,7 @@ export async function* runCoordinator(
       }
     }
     // flush any trailing partial line
-    const last = parseLine(buf);
+    const last = parseLine(buf, invocation.provider);
     if (last) {
       if (last.kind === "done" || last.kind === "error") sawTerminal = true;
       yield last;

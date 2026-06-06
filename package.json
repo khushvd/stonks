@@ -11,6 +11,7 @@
     "scrape": "tsx src/cli/scrape-company.ts",
     "ingest": "tsx src/cli/ingest.ts",
     "synthesize": "tsx src/cli/synthesize.ts",
+    "peer-kpis": "tsx src/cli/peer-kpis.ts",
     "extract": "tsx src/cli/extract.ts",
     "pdf-text": "tsx src/cli/pdf-text.ts",
     "db": "tsx src/cli/db.ts",

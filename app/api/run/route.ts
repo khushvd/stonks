@@ -1,4 +1,5 @@
-import { runCoordinator } from "../../../src/coordinator/run.js";
+import { runExecution } from "../../../src/executor/run.js";
+import { parsePlannerJson } from "../../../src/planner/plan.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,24 +10,29 @@ function sse(obj: unknown): string {
 }
 
 export async function POST(req: Request) {
-  let body: { company?: string; ask?: string };
+  let body: { plan?: unknown; ask?: string };
   try {
     body = await req.json();
   } catch {
     return new Response(JSON.stringify({ error: "invalid JSON body" }), { status: 400 });
   }
-  const company = (body.company ?? "").trim();
   const ask = (body.ask ?? "").trim();
-  if (!company) return new Response(JSON.stringify({ error: "missing company" }), { status: 400 });
+  if (!body.plan) return new Response(JSON.stringify({ error: "missing confirmed plan" }), { status: 400 });
+
+  let plan;
+  try {
+    plan = parsePlannerJson(JSON.stringify(body.plan));
+  } catch (e) {
+    return new Response(JSON.stringify({ error: `invalid confirmed plan: ${(e as Error).message}` }), { status: 400 });
+  }
 
   const encoder = new TextEncoder();
-  // Abort the coordinator (kill the `claude` child) if the browser disconnects mid-stream,
-  // so a headless run never keeps billing after nobody is listening.
+  // Abort the deterministic child process if the browser disconnects mid-stream.
   const ac = new AbortController();
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const ev of runCoordinator(company, ask, undefined, ac.signal)) {
+        for await (const ev of runExecution(plan, ask, undefined, ac.signal)) {
           controller.enqueue(encoder.encode(sse(ev)));
         }
       } catch (e) {

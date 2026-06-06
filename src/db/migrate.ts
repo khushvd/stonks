@@ -6,6 +6,37 @@ function hasColumn(db: Database.Database, table: string, col: string): boolean {
 }
 
 export function migrate(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS industry_metrics (
+      industry TEXT NOT NULL,
+      metric_key TEXT NOT NULL,
+      label TEXT,
+      source TEXT NOT NULL CHECK(source IN ('notebooklm','sonnet')),
+      PRIMARY KEY (industry, metric_key)
+    );
+  `);
+  if (!hasColumn(db, "industry_metrics", "unit")) {
+    db.exec("ALTER TABLE industry_metrics ADD COLUMN unit TEXT");
+  }
+  if (!hasColumn(db, "industry_metrics", "description")) {
+    db.exec("ALTER TABLE industry_metrics ADD COLUMN description TEXT");
+  }
+  if (!hasColumn(db, "industry_metrics", "priority")) {
+    db.exec("ALTER TABLE industry_metrics ADD COLUMN priority INTEGER");
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS company_kpi_status (
+      company_id INTEGER NOT NULL REFERENCES companies(id),
+      metric_key TEXT NOT NULL,
+      label TEXT,
+      unit TEXT,
+      status TEXT NOT NULL CHECK(status IN ('missing','failed')),
+      missing_reason TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (company_id, metric_key)
+    );
+  `);
+
   if (!hasColumn(db, "metrics", "trust")) {
     db.exec("ALTER TABLE metrics ADD COLUMN trust TEXT NOT NULL DEFAULT 'verified' CHECK(trust IN ('verified','notebooklm-only'))");
   }

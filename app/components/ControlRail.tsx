@@ -1,22 +1,47 @@
 "use client";
 import { useState } from "react";
 import type { AgentEvent } from "../../src/coordinator/types.js";
+import type { AnalystPlan } from "../../src/planner/plan.js";
+import { PlanReview } from "./PlanReview.js";
 import { ProgressFeed } from "./ProgressFeed.js";
 
-export function ControlRail({ onComplete }: { onComplete: (company: string) => void }) {
+export function ControlRail({ onComplete }: { onComplete: (company: string, peers: string[], plan: AnalystPlan) => void }) {
   const [company, setCompany] = useState("Asian Paints");
   const [ask, setAsk] = useState("How have margins trended over the last few quarters?");
+  const [plan, setPlan] = useState<AnalystPlan | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  const [planning, setPlanning] = useState(false);
   const [running, setRunning] = useState(false);
 
+  async function planRun() {
+    setEvents([]);
+    setPlanning(true);
+    setPlan(null);
+    try {
+      const res = await fetch("/api/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company, ask }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "planner failed");
+      setPlan(body.plan as AnalystPlan);
+    } catch (e) {
+      setEvents((prev) => [...prev, { kind: "error", message: (e as Error).message }]);
+    } finally {
+      setPlanning(false);
+    }
+  }
+
   async function run() {
+    if (!plan) return;
     setEvents([]);
     setRunning(true);
     try {
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company, ask }),
+        body: JSON.stringify({ plan, ask }),
       });
       if (!res.body) throw new Error("no stream");
       const reader = res.body.getReader();
@@ -40,7 +65,7 @@ export function ControlRail({ onComplete }: { onComplete: (company: string) => v
       setEvents((prev) => [...prev, { kind: "error", message: (e as Error).message }]);
     } finally {
       setRunning(false);
-      onComplete(company);
+      onComplete(plan.company.name, plan.peers.map((p) => p.name), plan);
     }
   }
 
@@ -49,31 +74,38 @@ export function ControlRail({ onComplete }: { onComplete: (company: string) => v
       <label style={{ fontSize: 11, color: "var(--muted)" }}>Company</label>
       <input
         value={company}
-        onChange={(e) => setCompany(e.target.value)}
-        disabled={running}
+        onChange={(e) => {
+          setCompany(e.target.value);
+          setPlan(null);
+        }}
+        disabled={planning || running}
         style={inputStyle}
       />
       <label style={{ fontSize: 11, color: "var(--muted)" }}>Ask</label>
       <textarea
         value={ask}
-        onChange={(e) => setAsk(e.target.value)}
-        disabled={running}
+        onChange={(e) => {
+          setAsk(e.target.value);
+          setPlan(null);
+        }}
+        disabled={planning || running}
         rows={3}
         style={{ ...inputStyle, resize: "vertical" }}
       />
       <button
-        onClick={run}
-        disabled={running || !company.trim()}
-        style={{
-          background: running ? "var(--muted)" : "var(--accent)",
-          color: "#fff",
-          border: "none",
-          borderRadius: 4,
-          padding: "6px 14px",
-          fontWeight: 600,
-        }}
+        onClick={planRun}
+        disabled={planning || running || !company.trim()}
+        style={buttonStyle(planning || running ? "var(--muted)" : "var(--panel)", "var(--text)")}
       >
-        {running ? "Running…" : "▶ Run"}
+        {planning ? "Planning..." : "Plan"}
+      </button>
+      {plan && <PlanReview plan={plan} onChange={setPlan} disabled={running} />}
+      <button
+        onClick={run}
+        disabled={running || !plan}
+        style={buttonStyle(running || !plan ? "var(--muted)" : "var(--accent)", "#fff")}
+      >
+        {running ? "Running..." : "Run confirmed plan"}
       </button>
       <ProgressFeed events={events} running={running} />
     </div>
@@ -89,3 +121,16 @@ const inputStyle: React.CSSProperties = {
   margin: "4px 0 10px",
   color: "var(--text)",
 };
+
+function buttonStyle(background: string, color: string): React.CSSProperties {
+  return {
+    background,
+    color,
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "6px 14px",
+    fontWeight: 600,
+    marginRight: 8,
+    marginBottom: 8,
+  };
+}

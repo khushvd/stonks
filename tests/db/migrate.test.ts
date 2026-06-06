@@ -45,4 +45,15 @@ describe("migrate", () => {
     expect(columns(db, "filings")).toContain("notebooklm_source_id");
     expect(columns(db, "metrics_staging")).toContain("notebooklm_source_id");
   });
+
+  it("adds peer KPI status storage and industry metric metadata", () => {
+    const db = legacyDb();
+    migrate(db);
+    expect(columns(db, "company_kpi_status")).toEqual(
+      expect.arrayContaining(["company_id", "metric_key", "label", "unit", "status", "missing_reason", "updated_at"]),
+    );
+    expect(columns(db, "industry_metrics")).toEqual(
+      expect.arrayContaining(["unit", "description", "priority"]),
+    );
+  });
 });
