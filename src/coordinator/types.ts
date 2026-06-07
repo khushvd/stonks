@@ -1,10 +1,11 @@
 // One parsed unit of coordinator progress, surfaced to the browser over SSE.
-// Kinds match the design spec: step | tool | text | error | done.
+// Legacy coordinator parsers still emit tool/text, while the deterministic executor emits step ids.
 export type AgentEvent =
-  | { kind: "step"; label: string } // a pipeline step started (pnpm scrape/ingest/extract/verify/db)
+  | { kind: "step"; label: string; id?: string } // a pipeline step started (pnpm scrape/ingest/extract/verify/db)
+  | { kind: "step-complete"; label: string; id: string } // a deterministic executor step completed
   | { kind: "tool"; name: string; summary: string } // any other tool use
   | { kind: "text"; text: string } // assistant narration
-  | { kind: "error"; message: string } // run failed
+  | { kind: "error"; message: string; stepId?: string } // run failed
   | { kind: "done"; ok: boolean; summary: string }; // run finished
 
 export type CoordinatorProvider = "claude" | "codex";

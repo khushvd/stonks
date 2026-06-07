@@ -26,15 +26,38 @@ describe("buildExecutionCommands", () => {
   it("passes Asian Paints as a name and ASIANPAINT as the explicit Screener slug", () => {
     const commands = buildExecutionCommands(plan, "compare margins");
     expect(commands[0]).toEqual({
+      id: "scrape:main",
       label: "Scrape Asian Paints",
       cmd: "pnpm",
       args: ["scrape", "--name", "Asian Paints", "--slug", "ASIANPAINT", "--annual", "--per-type", "4"],
     });
     expect(commands).toContainEqual({
+      id: "scrape:peer:BERGEPAINT",
       label: "Scrape peer Berger Paints",
       cmd: "pnpm",
       args: ["scrape", "--name", "Berger Paints", "--slug", "BERGEPAINT", "--annual", "--per-type", "4"],
     });
+  });
+
+  it("assigns stable command ids for every deterministic step", () => {
+    const ids = buildExecutionCommands(plan, "compare margins").map((c) => c.id);
+    expect(ids).toEqual([
+      "scrape:main",
+      "scrape:peer:BERGEPAINT",
+      "scrape:peer:KANSAINER",
+      "scrape:peer:INDIGOPNTS",
+      "ingest:main",
+      "ingest:peer:BERGEPAINT",
+      "ingest:peer:KANSAINER",
+      "ingest:peer:INDIGOPNTS",
+      "synthesize:main",
+      "peer-kpis",
+      "verify:ASIANPAINT",
+      "verify:BERGEPAINT",
+      "verify:KANSAINER",
+      "verify:INDIGOPNTS",
+      "db:summary",
+    ]);
   });
 
   it("keeps the peer notebook analysis chain deterministic and ordered", () => {
@@ -76,5 +99,44 @@ describe("runExecution", () => {
     expect(calls).toHaveLength(15);
     expect(calls[0]).toEqual({ cmd: "pnpm", args: ["scrape", "--name", "Asian Paints", "--slug", "ASIANPAINT", "--annual", "--per-type", "4"] });
     expect(events.at(-1)).toEqual({ kind: "done", ok: true, summary: "Deterministic analysis completed for Asian Paints." });
+  });
+
+  it("resumes from a requested step id", async () => {
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const spawn: Spawner = (cmd, args) => {
+      calls.push({ cmd, args });
+      return {
+        stdout: (async function* () {})(),
+        exitCode: Promise.resolve(0),
+        stderr: Promise.resolve(""),
+      };
+    };
+
+    const events = await collect(runExecution(plan, "compare margins", spawn, undefined, { startAtStepId: "peer-kpis" }));
+
+    expect(calls[0]).toEqual({
+      cmd: "pnpm",
+      args: ["peer-kpis", "Asian Paints", "--ask", "compare margins", "--companies", "Asian Paints,Berger Paints,Kansai Nerolac,Indigo Paints"],
+    });
+    expect(events[0]).toEqual({ kind: "step", id: "peer-kpis", label: "Extract peer sector KPI pack" });
+    expect(events[1]).toEqual({ kind: "step-complete", id: "peer-kpis", label: "Extract peer sector KPI pack" });
+    expect(events.at(-1)).toEqual({ kind: "done", ok: true, summary: "Deterministic analysis completed for Asian Paints." });
+  });
+
+  it("emits the failed resumed step id in error events", async () => {
+    const spawn: Spawner = () => ({
+      stdout: (async function* () {})(),
+      exitCode: Promise.resolve(1),
+      stderr: Promise.resolve("NotebookLM auth expired"),
+    });
+
+    const events = await collect(runExecution(plan, "compare margins", spawn, undefined, { startAtStepId: "ingest:main" }));
+
+    expect(events[0]).toEqual({ kind: "step", id: "ingest:main", label: "Ingest Asian Paints into NotebookLM" });
+    expect(events[1]).toEqual({
+      kind: "error",
+      stepId: "ingest:main",
+      message: "Ingest Asian Paints into NotebookLM failed with code 1: NotebookLM auth expired",
+    });
   });
 });
