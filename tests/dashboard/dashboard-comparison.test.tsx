@@ -35,7 +35,7 @@ const comparison: ComparisonData = {
 describe("Dashboard comparison rendering", () => {
   it("renders the sector KPI matrix when comparison data is supplied", () => {
     const html = renderToStaticMarkup(<Dashboard data={data} comparison={comparison} />);
-    expect(html.indexOf("Couldn&#x27;t synthesize a brief")).toBeLessThan(html.indexOf("Sector KPI Matrix"));
+    expect(html.indexOf("Sector KPI Matrix")).toBeLessThan(html.indexOf("Couldn&#x27;t synthesize a brief"));
     expect(html.indexOf("Sector KPI Matrix")).toBeLessThan(html.indexOf("Evidence"));
     expect(html).toContain("Sector KPI Matrix");
     expect(html).toContain("Berger Paints");

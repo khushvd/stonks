@@ -10,6 +10,7 @@ import { MarginChart } from "./MarginChart.js";
 import { TrendsPanel } from "./TrendsPanel.js";
 import { ComparisonPanel } from "./ComparisonPanel.js";
 import { RejectsPanel } from "./RejectsPanel.js";
+import { CommentaryPanel } from "./CommentaryPanel.js";
 
 export function Dashboard({
   data,
@@ -26,14 +27,15 @@ export function Dashboard({
   return (
     <div>
       <CompanyHeader company={data.company} />
-      <BriefPanel brief={data.brief} />
       {comparison && <ComparisonPanel data={comparison} />}
-      <ReviewerPanel findings={reviewerFindings} />
+      <TrendsPanel trends={data.trends} />
+      <CommentaryPanel trends={data.commentaryTrends} />
+      <BriefPanel brief={data.brief} />
       <h2 style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", margin: "8px 0 12px" }}>Evidence</h2>
+      <ReviewerPanel findings={reviewerFindings} />
       <IntegrityTile summary={data.integrity} />
       <MetricsTable rows={data.metrics} />
       <MarginChart rows={data.metrics} />
-      <TrendsPanel trends={data.trends} />
       <RejectsPanel rows={data.rejects} />
     </div>
   );
