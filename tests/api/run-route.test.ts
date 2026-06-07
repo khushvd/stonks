@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => {
     openDb: vi.fn(() => db),
     createAnalysisRun: vi.fn(() => 42),
     getAnalysisRun: vi.fn(),
+    markRunCancelled: vi.fn(),
     markRunCompleted: vi.fn(),
     markRunFailed: vi.fn(),
     markRunFailedWithoutStep: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock("../../src/db/db.js", () => ({
 vi.mock("../../src/db/analysis-runs.js", () => ({
   createAnalysisRun: mocks.createAnalysisRun,
   getAnalysisRun: mocks.getAnalysisRun,
+  markRunCancelled: mocks.markRunCancelled,
   markRunCompleted: mocks.markRunCompleted,
   markRunFailed: mocks.markRunFailed,
   markRunFailedWithoutStep: mocks.markRunFailedWithoutStep,
@@ -249,6 +251,16 @@ describe("/api/run", () => {
     const res = await POST(new Request("http://localhost/api/run", {
       method: "POST",
       body: JSON.stringify({ resume: true }),
+    }));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "missing runId for resume" });
+  });
+
+  it("rejects resume requests with non-positive run ids", async () => {
+    const res = await POST(new Request("http://localhost/api/run", {
+      method: "POST",
+      body: JSON.stringify({ runId: 0, resume: true }),
     }));
 
     expect(res.status).toBe(400);

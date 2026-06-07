@@ -2,6 +2,7 @@ import { openDb } from "../../../src/db/db.js";
 import {
   createAnalysisRun,
   getAnalysisRun,
+  markRunCancelled,
   markRunCompleted,
   markRunFailed,
   markRunFailedWithoutStep,
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   try {
     if (body.resume) {
       const resumeRunId = body.runId;
-      if (typeof resumeRunId !== "number" || !Number.isInteger(resumeRunId)) {
+      if (typeof resumeRunId !== "number" || !Number.isInteger(resumeRunId) || resumeRunId < 1) {
         db.close();
         return jsonError("missing runId for resume", 400);
       }
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
   // Abort the deterministic child process if the browser disconnects mid-stream.
   const ac = new AbortController();
+  let closed = false;
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -109,12 +111,16 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "failed" } satisfies AgentEvent)));
         controller.enqueue(encoder.encode(sse({ kind: "error", message })));
       } finally {
+        closed = true;
         db.close();
         controller.close();
       }
     },
     cancel() {
       ac.abort();
+      if (!closed) {
+        markRunCancelled(db, runId, "client disconnected");
+      }
     },
   });
 

@@ -219,6 +219,17 @@ export function markRunFailedWithoutStep(db: Database.Database, runId: number, m
   `).run(message, runId);
 }
 
+export function markRunCancelled(db: Database.Database, runId: number, message: string): void {
+  db.prepare(`
+    UPDATE analysis_runs
+    SET status = 'cancelled',
+        failed_step_id = NULL,
+        error_message = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(message, runId);
+}
+
 export function markRunCompleted(db: Database.Database, runId: number): void {
   db.prepare(`
     UPDATE analysis_runs
