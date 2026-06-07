@@ -51,6 +51,7 @@ describe("buildExecutionCommands", () => {
       "ingest:peer:KANSAINER",
       "ingest:peer:INDIGOPNTS",
       "synthesize:main",
+      "commentary-trends:main",
       "peer-kpis",
       "verify:ASIANPAINT",
       "verify:BERGEPAINT",
@@ -72,6 +73,7 @@ describe("buildExecutionCommands", () => {
       "Ingest peer Kansai Nerolac into NotebookLM",
       "Ingest peer Indigo Paints into NotebookLM",
       "Synthesize cited brief",
+      "Extract management commentary trends",
       "Extract peer sector KPI pack",
       "Verify staged metrics for Asian Paints",
       "Verify staged metrics for Berger Paints",
@@ -111,7 +113,7 @@ describe("runExecution", () => {
 
     const events = await collect(runExecution(plan, "compare margins", spawn));
 
-    expect(calls).toHaveLength(15);
+    expect(calls).toHaveLength(16);
     expect(calls[0]).toEqual({ cmd: "pnpm", args: ["scrape", "--name", "Asian Paints", "--slug", "ASIANPAINT", "--annual", "--per-type", "4"] });
     expect(events.at(-1)).toEqual({ kind: "done", ok: true, summary: "Deterministic analysis completed for Asian Paints." });
   });

@@ -77,6 +77,7 @@ export function buildExecutionCommands(plan: AnalystPlan, ask: string): Executio
     { id: "ingest:main", label: `Ingest ${plan.company.name} into NotebookLM`, cmd: "pnpm", args: ["ingest", plan.company.name] },
     ...peerIngestCommands,
     { id: "synthesize:main", label: "Synthesize cited brief", cmd: "pnpm", args: ["synthesize", plan.company.name, ask] },
+    { id: "commentary-trends:main", label: "Extract management commentary trends", cmd: "pnpm", args: ["-s", "commentary-trends", plan.company.name] },
     { id: "peer-kpis", label: "Extract peer sector KPI pack", cmd: "pnpm", args: ["peer-kpis", plan.company.name, "--ask", ask, "--companies", companyNames] },
     ...verifyCommands,
     { id: "db:summary", label: "Summarize database", cmd: "pnpm", args: ["db", "summary"] },
@@ -120,6 +121,13 @@ export async function* runExecution(
       const code = await current.exitCode;
       await drained;
       if (signal?.aborted) return;
+      // commentary-trends failure is non-fatal: emit a warning and continue.
+      if (code !== 0 && command.id === "commentary-trends:main") {
+        yield { kind: "text", text: "⚠ commentary-trends failed — skipping (dashboard will show commentary unavailable)" };
+        yield { kind: "step-complete", id: command.id, label: command.label };
+        current = null;
+        continue;
+      }
       if (code !== 0) {
         const detail = (await current.stderr)?.trim();
         const message = detail
