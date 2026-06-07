@@ -29,3 +29,7 @@ export function listKpiStatuses(db: Database.Database, companyId: number): Compa
     .prepare("SELECT * FROM company_kpi_status WHERE company_id = ? ORDER BY metric_key")
     .all(companyId) as CompanyKpiStatus[];
 }
+
+export function deleteKpiStatus(db: Database.Database, companyId: number, metricKey: string): void {
+  db.prepare("DELETE FROM company_kpi_status WHERE company_id = ? AND metric_key = ?").run(companyId, metricKey);
+}

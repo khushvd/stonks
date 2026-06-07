@@ -1,9 +1,9 @@
 import type Database from "better-sqlite3";
 import { getCompany } from "../db/companies.js";
-import { getFilingBySourceId } from "../db/filings.js";
+import { getFilingBySourceId, listFilings } from "../db/filings.js";
 import { stageMetric } from "../db/metrics.js";
 import { getNotebook } from "../db/notebooks.js";
-import { upsertKpiStatus } from "../db/company-kpi-status.js";
+import { deleteKpiStatus, upsertKpiStatus } from "../db/company-kpi-status.js";
 import { nbAsk } from "../notebooklm/cli.js";
 import type { NbReference } from "../notebooklm/cli.js";
 import type { ExpectedKpi } from "../dashboard/sector-kpis.js";
@@ -111,6 +111,7 @@ export async function runPeerKpisForCompany(
   const company = getCompany(db, companyName);
   if (!company) throw new Error(`Company "${companyName}" not found. Run pnpm scrape first.`);
   const notebook = getNotebook(db, company.id);
+  const companyFilings = listFilings(db, company.id);
   if (!notebook?.notebook_id) {
     for (const kpi of expectedKpis) {
       upsertKpiStatus(db, {
@@ -170,28 +171,31 @@ export async function runPeerKpisForCompany(
     }
     const ref = row.cite !== null ? refByNum.get(row.cite) : null;
     const filing = ref ? getFilingBySourceId(db, company.id, ref.source_id) : undefined;
-    if (!filing) {
+    const fallbackFiling = companyFilings[companyFilings.length - 1];
+    const stagingFiling = filing ?? fallbackFiling;
+    if (!stagingFiling) {
       upsertKpiStatus(db, {
         company_id: company.id,
         metric_key: row.metric_key,
         label: row.label,
         unit: row.unit,
         status: "failed",
-        missing_reason: "Found a value but no cited source mapped to an ingested filing.",
+        missing_reason: "Found a value but the company has no ingested filings to verify against.",
       });
       continue;
     }
     stageMetric(db, {
-      filing_id: filing.id,
+      filing_id: stagingFiling.id,
       name: row.metric_key,
       value: row.value,
       unit: row.unit,
       period: row.period,
       source_page: null,
       excerpt: ref?.cited_text ?? null,
-      source_url: filing.source_url,
-      notebooklm_source_id: ref?.source_id ?? null,
+      source_url: stagingFiling.source_url,
+      notebooklm_source_id: filing ? (ref?.source_id ?? null) : null,
     });
+    deleteKpiStatus(db, company.id, row.metric_key);
   }
 
   for (const kpi of expectedKpis) {

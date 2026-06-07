@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openDb } from "../../src/db/db.js";
 import { upsertCompany } from "../../src/db/companies.js";
-import { listKpiStatuses, upsertKpiStatus } from "../../src/db/company-kpi-status.js";
+import { deleteKpiStatus, listKpiStatuses, upsertKpiStatus } from "../../src/db/company-kpi-status.js";
 
 describe("company KPI status helpers", () => {
   it("upserts missing KPI status per company and metric", () => {
@@ -35,5 +35,23 @@ describe("company KPI status helpers", () => {
         missing_reason: "NotebookLM returned malformed JSON.",
       }),
     ]);
+  });
+
+  it("deletes a KPI status when a value is later found", () => {
+    const db = openDb(":memory:");
+    const companyId = upsertCompany(db, { name: "SAMHI Hotels", ticker: "SAMHI", industry: "Hotels" });
+
+    upsertKpiStatus(db, {
+      company_id: companyId,
+      metric_key: "revpar",
+      label: "RevPAR",
+      unit: "rs",
+      status: "failed",
+      missing_reason: "citation mapping failed",
+    });
+
+    deleteKpiStatus(db, companyId, "revpar");
+
+    expect(listKpiStatuses(db, companyId)).toEqual([]);
   });
 });
