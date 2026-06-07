@@ -43,7 +43,7 @@ export function getCommentaryTrends(db: Database.Database, companyId: number): C
     period: r.period,
     summary: r.summary,
     tone: r.tone,
-    keyTopics: JSON.parse(r.key_topics) as string[],
+    keyTopics: (() => { try { return JSON.parse(r.key_topics) as string[]; } catch { return [] as string[]; } })(),
     contradictionNote: r.contradiction_note,
   }));
 }
