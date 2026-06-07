@@ -56,4 +56,26 @@ describe("migrate", () => {
       expect.arrayContaining(["unit", "description", "priority"]),
     );
   });
+
+  it("adds analysis run history and step tables", () => {
+    const db = legacyDb();
+    migrate(db);
+    expect(columns(db, "analysis_runs")).toEqual(
+      expect.arrayContaining([
+        "id",
+        "company_name",
+        "ask",
+        "plan_json",
+        "status",
+        "failed_step_id",
+        "error_message",
+        "created_at",
+        "updated_at",
+        "completed_at",
+      ]),
+    );
+    expect(columns(db, "analysis_run_steps")).toEqual(
+      expect.arrayContaining(["run_id", "step_id", "label", "status", "started_at", "completed_at", "error_message"]),
+    );
+  });
 });
