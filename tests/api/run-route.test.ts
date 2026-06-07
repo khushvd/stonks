@@ -154,6 +154,58 @@ describe("/api/run", () => {
     expect(mocks.replaceRunSteps).not.toHaveBeenCalled();
   });
 
+  it("records completed and failed step lifecycle events while preserving the executor error frame", async () => {
+    emitted = [
+      { kind: "step", id: "peer-kpis", label: "Extract peer sector KPI pack" },
+      { kind: "step-complete", id: "peer-kpis", label: "Extract peer sector KPI pack" },
+      { kind: "step", id: "verify:ASIANPAINT", label: "Verify staged metrics for Asian Paints" },
+      { kind: "error", stepId: "verify:ASIANPAINT", message: "Verifier rejected citation" },
+    ];
+
+    const res = await POST(new Request("http://localhost/api/run", {
+      method: "POST",
+      body: JSON.stringify({ plan, ask: "compare margins" }),
+    }));
+
+    expect(res.status).toBe(200);
+    expect(await readFrames(res)).toEqual([
+      { kind: "run", runId: 42, status: "running" },
+      emitted[0],
+      emitted[1],
+      emitted[2],
+      { kind: "run", runId: 42, status: "failed" },
+      emitted[3],
+    ]);
+    expect(mocks.recordStepRunning).toHaveBeenCalledWith(mocks.db, 42, "peer-kpis");
+    expect(mocks.recordStepCompleted).toHaveBeenCalledWith(mocks.db, 42, "peer-kpis");
+    expect(mocks.recordStepRunning).toHaveBeenCalledWith(mocks.db, 42, "verify:ASIANPAINT");
+    expect(mocks.markRunFailed).toHaveBeenCalledWith(
+      mocks.db,
+      42,
+      "verify:ASIANPAINT",
+      "Verifier rejected citation",
+    );
+  });
+
+  it("emits an error without marking an unknown step when route streaming fails before a step is known", async () => {
+    mocks.runExecution.mockImplementationOnce(async function* () {
+      throw new Error("duplicate executor step id: verify:ASIANPAINT");
+    });
+
+    const res = await POST(new Request("http://localhost/api/run", {
+      method: "POST",
+      body: JSON.stringify({ plan, ask: "compare margins" }),
+    }));
+
+    expect(res.status).toBe(200);
+    expect(await readFrames(res)).toEqual([
+      { kind: "run", runId: 42, status: "running" },
+      { kind: "run", runId: 42, status: "failed" },
+      { kind: "error", message: "duplicate executor step id: verify:ASIANPAINT" },
+    ]);
+    expect(mocks.markRunFailed).not.toHaveBeenCalled();
+  });
+
   it("rejects requests without a confirmed plan", async () => {
     const res = await POST(new Request("http://localhost/api/run", {
       method: "POST",
@@ -172,5 +224,41 @@ describe("/api/run", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "missing runId for resume" });
+  });
+
+  it("rejects resume requests for unknown runs", async () => {
+    mocks.getAnalysisRun.mockReturnValue(null);
+
+    const res = await POST(new Request("http://localhost/api/run", {
+      method: "POST",
+      body: JSON.stringify({ runId: 999, resume: true }),
+    }));
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "unknown run: 999" });
+  });
+
+  it("rejects resume requests unless the run failed with a failed step", async () => {
+    mocks.getAnalysisRun.mockReturnValue({
+      id: 7,
+      companyName: "Asian Paints",
+      ask: "compare margins",
+      plan,
+      status: "completed",
+      failedStepId: null,
+      errorMessage: null,
+      createdAt: "2026-06-07T00:00:00.000Z",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+      completedAt: "2026-06-07T00:01:00.000Z",
+      steps: [],
+    });
+
+    const res = await POST(new Request("http://localhost/api/run", {
+      method: "POST",
+      body: JSON.stringify({ runId: 7, resume: true }),
+    }));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "only failed runs can be resumed" });
   });
 });

@@ -99,7 +99,9 @@ export async function POST(req: Request) {
         }
       } catch (e) {
         const message = (e as Error).message;
-        markRunFailed(db, runId, startAtStepId ?? "unknown", message);
+        if (startAtStepId) {
+          markRunFailed(db, runId, startAtStepId, message);
+        }
         controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "failed" } satisfies AgentEvent)));
         controller.enqueue(encoder.encode(sse({ kind: "error", message })));
       } finally {
