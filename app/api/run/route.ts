@@ -1,5 +1,18 @@
-import { runExecution } from "../../../src/executor/run.js";
+import { openDb } from "../../../src/db/db.js";
+import {
+  createAnalysisRun,
+  getAnalysisRun,
+  markRunCancelled,
+  markRunCompleted,
+  markRunFailed,
+  markRunFailedWithoutStep,
+  recordStepCompleted,
+  recordStepRunning,
+  replaceRunSteps,
+} from "../../../src/db/analysis-runs.js";
+import { buildExecutionCommands, runExecution } from "../../../src/executor/run.js";
 import { parsePlannerJson } from "../../../src/planner/plan.js";
+import type { AgentEvent } from "../../../src/coordinator/types.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,40 +22,105 @@ function sse(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
+function jsonError(error: string, status: number): Response {
+  return new Response(JSON.stringify({ error }), { status });
+}
+
 export async function POST(req: Request) {
-  let body: { plan?: unknown; ask?: string };
+  let body: { plan?: unknown; ask?: string; runId?: number; resume?: boolean };
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: "invalid JSON body" }), { status: 400 });
+    return jsonError("invalid JSON body", 400);
   }
-  const ask = (body.ask ?? "").trim();
-  if (!body.plan) return new Response(JSON.stringify({ error: "missing confirmed plan" }), { status: 400 });
 
+  let ask = (body.ask ?? "").trim();
   let plan;
+  let runId: number;
+  let startAtStepId: string | undefined;
+  const db = openDb();
+
   try {
-    plan = parsePlannerJson(JSON.stringify(body.plan));
+    if (body.resume) {
+      const resumeRunId = body.runId;
+      if (typeof resumeRunId !== "number" || !Number.isInteger(resumeRunId) || resumeRunId < 1) {
+        db.close();
+        return jsonError("missing runId for resume", 400);
+      }
+      const existing = getAnalysisRun(db, resumeRunId);
+      if (!existing) {
+        db.close();
+        return jsonError(`unknown run: ${resumeRunId}`, 404);
+      }
+      if (existing.status !== "failed" || !existing.failedStepId) {
+        db.close();
+        return jsonError("only failed runs can be resumed", 400);
+      }
+      plan = existing.plan;
+      ask = existing.ask;
+      runId = existing.id;
+      startAtStepId = existing.failedStepId;
+    } else {
+      if (!body.plan) {
+        db.close();
+        return jsonError("missing confirmed plan", 400);
+      }
+      plan = parsePlannerJson(JSON.stringify(body.plan));
+      const steps = buildExecutionCommands(plan, ask).map(({ id, label }) => ({ stepId: id, label }));
+      runId = createAnalysisRun(db, { companyName: plan.company.name, ask, plan });
+      replaceRunSteps(db, runId, steps);
+    }
   } catch (e) {
-    return new Response(JSON.stringify({ error: `invalid confirmed plan: ${(e as Error).message}` }), { status: 400 });
+    db.close();
+    return jsonError(`invalid confirmed plan: ${(e as Error).message}`, 400);
   }
 
   const encoder = new TextEncoder();
   // Abort the deterministic child process if the browser disconnects mid-stream.
   const ac = new AbortController();
+  let closed = false;
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const ev of runExecution(plan, ask, undefined, ac.signal)) {
+        controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "running" })));
+        for await (const ev of runExecution(plan, ask, undefined, ac.signal, startAtStepId ? { startAtStepId } : {})) {
+          if (ev.kind === "step" && ev.id) {
+            recordStepRunning(db, runId, ev.id);
+          } else if (ev.kind === "step-complete") {
+            recordStepCompleted(db, runId, ev.id);
+          } else if (ev.kind === "error") {
+            if (ev.stepId ?? startAtStepId) {
+              markRunFailed(db, runId, (ev.stepId ?? startAtStepId)!, ev.message);
+            } else {
+              markRunFailedWithoutStep(db, runId, ev.message);
+            }
+            controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "failed" } satisfies AgentEvent)));
+          } else if (ev.kind === "done") {
+            markRunCompleted(db, runId);
+            controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "completed" } satisfies AgentEvent)));
+          }
           controller.enqueue(encoder.encode(sse(ev)));
         }
       } catch (e) {
-        controller.enqueue(encoder.encode(sse({ kind: "error", message: (e as Error).message })));
+        const message = (e as Error).message;
+        if (startAtStepId) {
+          markRunFailed(db, runId, startAtStepId, message);
+        } else {
+          markRunFailedWithoutStep(db, runId, message);
+        }
+        controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "failed" } satisfies AgentEvent)));
+        controller.enqueue(encoder.encode(sse({ kind: "error", message })));
       } finally {
+        closed = true;
+        db.close();
         controller.close();
       }
     },
     cancel() {
       ac.abort();
+      if (!closed) {
+        markRunCancelled(db, runId, "client disconnected");
+      }
     },
   });
 

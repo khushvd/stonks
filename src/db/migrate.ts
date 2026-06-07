@@ -36,6 +36,31 @@ export function migrate(db: Database.Database): void {
       PRIMARY KEY (company_id, metric_key)
     );
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS analysis_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_name TEXT NOT NULL,
+      ask TEXT NOT NULL,
+      plan_json TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('planned','running','failed','completed','cancelled')),
+      failed_step_id TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS analysis_run_steps (
+      run_id INTEGER NOT NULL REFERENCES analysis_runs(id) ON DELETE CASCADE,
+      step_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending','running','completed','failed','skipped')),
+      started_at TEXT,
+      completed_at TEXT,
+      error_message TEXT,
+      PRIMARY KEY (run_id, step_id)
+    );
+  `);
 
   if (!hasColumn(db, "metrics", "trust")) {
     db.exec("ALTER TABLE metrics ADD COLUMN trust TEXT NOT NULL DEFAULT 'verified' CHECK(trust IN ('verified','notebooklm-only'))");

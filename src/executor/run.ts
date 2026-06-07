@@ -3,9 +3,14 @@ import type { AgentEvent, SpawnedProcess, Spawner } from "../coordinator/types.j
 import type { AnalystPlan, PeerPlan } from "../planner/plan.js";
 
 export interface ExecutionCommand {
+  id: string;
   label: string;
   cmd: string;
   args: string[];
+}
+
+export interface RunExecutionOptions {
+  startAtStepId?: string;
 }
 
 const defaultSpawn: Spawner = (cmd, args): SpawnedProcess => {
@@ -28,41 +33,56 @@ const defaultSpawn: Spawner = (cmd, args): SpawnedProcess => {
   };
 };
 
-function scrapeCommand(company: { name: string; slug: string }, label: string): ExecutionCommand {
+function scrapeCommand(company: { name: string; slug: string }, label: string, id: string): ExecutionCommand {
   return {
+    id,
     label,
     cmd: "pnpm",
     args: ["scrape", "--name", company.name, "--slug", company.slug, "--annual", "--per-type", "4"],
   };
 }
 
+function assertUniqueStepIds(commands: ExecutionCommand[]): void {
+  const seen = new Set<string>();
+  for (const command of commands) {
+    if (seen.has(command.id)) {
+      throw new Error(`duplicate executor step id: ${command.id}`);
+    }
+    seen.add(command.id);
+  }
+}
+
 export function buildExecutionCommands(plan: AnalystPlan, ask: string): ExecutionCommand[] {
   const peerCommands = plan.peers.map((peer: PeerPlan) =>
-    scrapeCommand(peer, `Scrape peer ${peer.name}`),
+    scrapeCommand(peer, `Scrape peer ${peer.name}`, `scrape:peer:${peer.slug}`),
   );
   const companies = [plan.company, ...plan.peers];
   const peerIngestCommands = plan.peers.map((peer: PeerPlan): ExecutionCommand => ({
+    id: `ingest:peer:${peer.slug}`,
     label: `Ingest peer ${peer.name} into NotebookLM`,
     cmd: "pnpm",
     args: ["ingest", peer.name],
   }));
   const companyNames = companies.map((c) => c.name).join(",");
   const verifyCommands = companies.map((company): ExecutionCommand => ({
+    id: `verify:${company.slug}`,
     label: `Verify staged metrics for ${company.name}`,
     cmd: "pnpm",
     args: ["verify", company.name],
   }));
 
-  return [
-    scrapeCommand(plan.company, `Scrape ${plan.company.name}`),
+  const commands = [
+    scrapeCommand(plan.company, `Scrape ${plan.company.name}`, "scrape:main"),
     ...peerCommands,
-    { label: `Ingest ${plan.company.name} into NotebookLM`, cmd: "pnpm", args: ["ingest", plan.company.name] },
+    { id: "ingest:main", label: `Ingest ${plan.company.name} into NotebookLM`, cmd: "pnpm", args: ["ingest", plan.company.name] },
     ...peerIngestCommands,
-    { label: "Synthesize cited brief", cmd: "pnpm", args: ["synthesize", plan.company.name, ask] },
-    { label: "Extract peer sector KPI pack", cmd: "pnpm", args: ["peer-kpis", plan.company.name, "--ask", ask, "--companies", companyNames] },
+    { id: "synthesize:main", label: "Synthesize cited brief", cmd: "pnpm", args: ["synthesize", plan.company.name, ask] },
+    { id: "peer-kpis", label: "Extract peer sector KPI pack", cmd: "pnpm", args: ["peer-kpis", plan.company.name, "--ask", ask, "--companies", companyNames] },
     ...verifyCommands,
-    { label: "Summarize database", cmd: "pnpm", args: ["db", "summary"] },
+    { id: "db:summary", label: "Summarize database", cmd: "pnpm", args: ["db", "summary"] },
   ];
+  assertUniqueStepIds(commands);
+  return commands;
 }
 
 async function drain(stdout: AsyncIterable<string>): Promise<void> {
@@ -76,15 +96,25 @@ export async function* runExecution(
   ask: string,
   spawn: Spawner = defaultSpawn,
   signal?: AbortSignal,
+  options: RunExecutionOptions = {},
 ): AsyncIterable<AgentEvent> {
   let current: SpawnedProcess | null = null;
   const onAbort = () => current?.kill?.();
   if (signal) signal.addEventListener("abort", onAbort);
 
   try {
-    for (const command of buildExecutionCommands(plan, ask)) {
+    const commands = buildExecutionCommands(plan, ask);
+    const startIndex = options.startAtStepId !== undefined
+      ? commands.findIndex((command) => command.id === options.startAtStepId)
+      : 0;
+    if (startIndex === -1) {
+      yield { kind: "error", stepId: options.startAtStepId, message: `Unknown resume step: ${options.startAtStepId}` };
+      return;
+    }
+
+    for (const command of commands.slice(startIndex)) {
       if (signal?.aborted) return;
-      yield { kind: "step", label: command.label };
+      yield { kind: "step", id: command.id, label: command.label };
       current = spawn(command.cmd, command.args);
       const drained = drain(current.stdout);
       const code = await current.exitCode;
@@ -95,9 +125,10 @@ export async function* runExecution(
         const message = detail
           ? `${command.label} failed with code ${code}: ${detail}`
           : `${command.label} failed with code ${code}`;
-        yield { kind: "error", message };
+        yield { kind: "error", stepId: command.id, message };
         return;
       }
+      yield { kind: "step-complete", id: command.id, label: command.label };
       current = null;
     }
     yield { kind: "done", ok: true, summary: `Deterministic analysis completed for ${plan.company.name}.` };
