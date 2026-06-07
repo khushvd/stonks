@@ -73,6 +73,7 @@ describe("analysis run persistence", () => {
       ask: "explain RevPAR",
       plan: { ...plan, company: { name: "SAMHI Hotels", slug: "SAMHI" } },
     });
+    replaceRunSteps(db, second, [{ stepId: "peer-kpis", label: "Extract peer sector KPI pack" }]);
     markRunCompleted(db, first);
     markRunFailed(db, second, "peer-kpis", "No NotebookLM answer");
 
@@ -85,5 +86,25 @@ describe("analysis run persistence", () => {
       failedStepId: "peer-kpis",
       peers: ["Berger Paints", "Kansai Nerolac", "Indigo Paints"],
     });
+  });
+
+  it("rejects unknown step IDs without mutating the parent run", () => {
+    const db = openDb(":memory:");
+    const id = createAnalysisRun(db, { companyName: "Asian Paints", ask: "compare margins", plan });
+    replaceRunSteps(db, id, [{ stepId: "scrape:main", label: "Scrape Asian Paints" }]);
+
+    expect(() => recordStepRunning(db, id, "peer-kpis")).toThrow("unknown analysis run step: peer-kpis");
+    expect(() => recordStepCompleted(db, id, "peer-kpis")).toThrow("unknown analysis run step: peer-kpis");
+    expect(() => markRunFailed(db, id, "peer-kpis", "No NotebookLM answer")).toThrow(
+      "unknown analysis run step: peer-kpis",
+    );
+
+    const run = getAnalysisRun(db, id)!;
+    expect(run).toMatchObject({
+      status: "planned",
+      failedStepId: null,
+      errorMessage: null,
+    });
+    expect(run.steps.map((s) => [s.stepId, s.status])).toEqual([["scrape:main", "pending"]]);
   });
 });

@@ -112,6 +112,12 @@ function toSummary(row: RunRow): AnalysisRunSummary {
   };
 }
 
+function assertStepUpdated(info: Database.RunResult, stepId: string): void {
+  if (info.changes === 0) {
+    throw new Error(`unknown analysis run step: ${stepId}`);
+  }
+}
+
 export function createAnalysisRun(
   db: Database.Database,
   input: { companyName: string; ask: string; plan: AnalystPlan },
@@ -146,6 +152,15 @@ export function replaceRunSteps(db: Database.Database, runId: number, steps: Ana
 
 export function recordStepRunning(db: Database.Database, runId: number, stepId: string): void {
   db.transaction(() => {
+    const stepInfo = db.prepare(`
+      UPDATE analysis_run_steps
+      SET status = 'running',
+          started_at = datetime('now'),
+          completed_at = NULL,
+          error_message = NULL
+      WHERE run_id = ? AND step_id = ?
+    `).run(runId, stepId);
+    assertStepUpdated(stepInfo, stepId);
     db.prepare(`
       UPDATE analysis_runs
       SET status = 'running',
@@ -155,39 +170,33 @@ export function recordStepRunning(db: Database.Database, runId: number, stepId: 
           updated_at = datetime('now')
       WHERE id = ?
     `).run(runId);
-    db.prepare(`
-      UPDATE analysis_run_steps
-      SET status = 'running',
-          started_at = COALESCE(started_at, datetime('now')),
-          completed_at = NULL,
-          error_message = NULL
-      WHERE run_id = ? AND step_id = ?
-    `).run(runId, stepId);
   })();
 }
 
 export function recordStepCompleted(db: Database.Database, runId: number, stepId: string): void {
   db.transaction(() => {
-    db.prepare(`
+    const stepInfo = db.prepare(`
       UPDATE analysis_run_steps
       SET status = 'completed',
           completed_at = datetime('now'),
           error_message = NULL
       WHERE run_id = ? AND step_id = ?
     `).run(runId, stepId);
+    assertStepUpdated(stepInfo, stepId);
     db.prepare("UPDATE analysis_runs SET updated_at = datetime('now') WHERE id = ?").run(runId);
   })();
 }
 
 export function markRunFailed(db: Database.Database, runId: number, stepId: string, message: string): void {
   db.transaction(() => {
-    db.prepare(`
+    const stepInfo = db.prepare(`
       UPDATE analysis_run_steps
       SET status = 'failed',
           completed_at = datetime('now'),
           error_message = ?
       WHERE run_id = ? AND step_id = ?
     `).run(message, runId, stepId);
+    assertStepUpdated(stepInfo, stepId);
     db.prepare(`
       UPDATE analysis_runs
       SET status = 'failed',
