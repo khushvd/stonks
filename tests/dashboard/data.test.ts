@@ -6,6 +6,7 @@ import { stageMetric, promoteMetric, rejectMetric } from "../../src/db/metrics.j
 import { saveBrief } from "../../src/db/briefs.js";
 import { getDashboard } from "../../src/dashboard/data.js";
 import type { Brief } from "../../src/synthesis/types.js";
+import { insertCommentaryTrends } from "../../src/db/commentary-trends.js";
 
 function seed() {
   const db = openDb(":memory:");
@@ -122,5 +123,27 @@ describe("getDashboard brief shaping", () => {
     const { db } = seedWithVerifiedRevenue();
     const data = getDashboard(db, "Acme")!;
     expect(data.brief).toBeNull();
+  });
+});
+
+describe("getDashboard — commentaryTrends", () => {
+  it("returns commentaryTrends ordered oldest→newest", () => {
+    const db = openDb(":memory:");
+    const companyId = upsertCompany(db, { name: "Acme", ticker: null, industry: null });
+    insertCommentaryTrends(db, companyId, [
+      { period: "Q1 FY24", summary: "Cautious.", tone: "cautious", keyTopics: ["margins"], contradictionNote: null },
+      { period: "Q4 FY24", summary: "Confident.", tone: "confident", keyTopics: ["volume"], contradictionNote: "shifted" },
+    ]);
+    const d = getDashboard(db, "Acme");
+    expect(d!.commentaryTrends).toHaveLength(2);
+    expect(d!.commentaryTrends[0].period).toBe("Q1 FY24");
+    expect(d!.commentaryTrends[1].contradictionNote).toBe("shifted");
+  });
+
+  it("returns empty array when no commentary rows exist", () => {
+    const db = openDb(":memory:");
+    upsertCompany(db, { name: "Empty Co", ticker: null, industry: null });
+    const d = getDashboard(db, "Empty Co");
+    expect(d!.commentaryTrends).toEqual([]);
   });
 });

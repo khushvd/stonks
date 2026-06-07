@@ -9,6 +9,9 @@ import { trustBadge, type Badge } from "./trust.js";
 import { buildCitationHref, buildSourceHref } from "./citation.js";
 import { UNIVERSAL_BASE } from "../extract/canonical.js";
 import type { Brief } from "../synthesis/types.js";
+import { getCommentaryTrends, type CommentaryTrend } from "../db/commentary-trends.js";
+
+export type { CommentaryTrend };
 
 export interface MetricRow {
   name: string;
@@ -65,6 +68,7 @@ export interface DashboardData {
   brief: BriefView | null;
   trends: TrendSeries[];
   industryKpis: string[]; // cached KPIs for this company's industry (from industry_metrics table)
+  commentaryTrends: CommentaryTrend[];
 }
 
 export function getDashboard(db: Database.Database, companyName: string): DashboardData | null {
@@ -166,10 +170,25 @@ export function getDashboard(db: Database.Database, companyName: string): Dashbo
   const metrics = allMetrics.filter((m) => universalNames.has(m.name) || briefNames.has(m.name));
 
   // --- Multi-period trend series from screener metrics ---
-  // Group screener-trust metrics by name; each group becomes a TrendSeries.
+  // Screener stores both quarterly and annual rows. Deduplicate by (name, period) keeping
+  // the first occurrence — quarterly rows are inserted first so quarterly wins for
+  // overlapping periods like "Mar 2024".
+  const MONTH_IDX: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  };
+  function periodToOrder(period: string): number {
+    const [month, year] = period.split(" ");
+    return parseInt(year, 10) * 12 + (MONTH_IDX[month] ?? 0);
+  }
+
   const screenerMetrics = allMetrics.filter((m) => m.trust === "screener" && m.period);
+  const seenKeys = new Set<string>();
   const trendsByName = new Map<string, TrendSeries>();
   for (const m of screenerMetrics) {
+    const dedupeKey = `${m.name}|${m.period}`;
+    if (seenKeys.has(dedupeKey)) continue;
+    seenKeys.add(dedupeKey);
     let series = trendsByName.get(m.name);
     if (!series) {
       series = { name: m.name, unit: m.unit, points: [] };
@@ -177,13 +196,27 @@ export function getDashboard(db: Database.Database, companyName: string): Dashbo
     }
     series.points.push({ period: m.period as string, value: m.value });
   }
-  // Keep only series with ≥2 points (meaningful trend), sorted by metric name.
-  const trends = Array.from(trendsByName.values()).filter((s) => s.points.length >= 2);
+
+  // Sort each series chronologically and keep only series with ≥2 points.
+  // Priority order: revenue, ebitda, opm_pct, pat, then others alphabetically.
+  const PRIORITY = ["revenue", "ebitda", "opm_pct", "pat"];
+  const allTrends = Array.from(trendsByName.values())
+    .filter((s) => s.points.length >= 2)
+    .map((s) => ({
+      ...s,
+      points: [...s.points].sort((a, b) => periodToOrder(a.period) - periodToOrder(b.period)),
+    }));
+  const trends = [
+    ...PRIORITY.map((name) => allTrends.find((s) => s.name === name)).filter((s): s is TrendSeries => !!s),
+    ...allTrends.filter((s) => !PRIORITY.includes(s.name)).sort((a, b) => a.name.localeCompare(b.name)),
+  ];
 
   // --- Industry KPIs from cache ---
   const industryKpis = company.industry
     ? getIndustryMetrics(db, company.industry).map((m) => m.metric_key)
     : [];
 
-  return { company, integrity, metrics, rejects, filings, brief, trends, industryKpis };
+  const commentaryTrends = getCommentaryTrends(db, company.id);
+
+  return { company, integrity, metrics, rejects, filings, brief, trends, industryKpis, commentaryTrends };
 }
