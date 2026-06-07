@@ -126,7 +126,7 @@ describe("analysis run persistence", () => {
     expect(run.steps.map((s) => [s.stepId, s.status])).toEqual([["scrape:main", "pending"]]);
   });
 
-  it("marks a run cancelled without changing step status", () => {
+  it("marks a running run cancelled and clears active step state", () => {
     const db = openDb(":memory:");
     const id = createAnalysisRun(db, { companyName: "Asian Paints", ask: "compare margins", plan });
     replaceRunSteps(db, id, [{ stepId: "scrape:main", label: "Scrape Asian Paints" }]);
@@ -140,6 +140,22 @@ describe("analysis run persistence", () => {
       failedStepId: null,
       errorMessage: "client disconnected",
     });
-    expect(run.steps.map((s) => [s.stepId, s.status])).toEqual([["scrape:main", "running"]]);
+    expect(run.steps.map((s) => [s.stepId, s.status, s.errorMessage])).toEqual([
+      ["scrape:main", "skipped", "client disconnected"],
+    ]);
+  });
+
+  it("does not overwrite terminal runs with cancelled", () => {
+    const db = openDb(":memory:");
+    const id = createAnalysisRun(db, { companyName: "Asian Paints", ask: "compare margins", plan });
+    replaceRunSteps(db, id, [{ stepId: "scrape:main", label: "Scrape Asian Paints" }]);
+    markRunCompleted(db, id);
+
+    markRunCancelled(db, id, "client disconnected");
+
+    const run = getAnalysisRun(db, id)!;
+    expect(run.status).toBe("completed");
+    expect(run.errorMessage).toBeNull();
+    expect(run.steps.map((s) => [s.stepId, s.status])).toEqual([["scrape:main", "pending"]]);
   });
 });
