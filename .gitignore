@@ -6,6 +6,7 @@ data
 
 # brainstorm visual-companion scratch
 .superpowers/
+.worktrees/
 
 # next.js
 /.next/
