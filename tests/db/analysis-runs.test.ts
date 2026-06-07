@@ -6,6 +6,7 @@ import {
   listAnalysisRuns,
   markRunCompleted,
   markRunFailed,
+  markRunFailedWithoutStep,
   recordStepCompleted,
   recordStepRunning,
   replaceRunSteps,
@@ -104,6 +105,22 @@ describe("analysis run persistence", () => {
       status: "planned",
       failedStepId: null,
       errorMessage: null,
+    });
+    expect(run.steps.map((s) => [s.stepId, s.status])).toEqual([["scrape:main", "pending"]]);
+  });
+
+  it("marks a run failed without a failed step for setup-level errors", () => {
+    const db = openDb(":memory:");
+    const id = createAnalysisRun(db, { companyName: "Asian Paints", ask: "compare margins", plan });
+    replaceRunSteps(db, id, [{ stepId: "scrape:main", label: "Scrape Asian Paints" }]);
+
+    markRunFailedWithoutStep(db, id, "duplicate executor step id: verify:ASIANPAINT");
+
+    const run = getAnalysisRun(db, id)!;
+    expect(run).toMatchObject({
+      status: "failed",
+      failedStepId: null,
+      errorMessage: "duplicate executor step id: verify:ASIANPAINT",
     });
     expect(run.steps.map((s) => [s.stepId, s.status])).toEqual([["scrape:main", "pending"]]);
   });

@@ -4,6 +4,7 @@ import {
   getAnalysisRun,
   markRunCompleted,
   markRunFailed,
+  markRunFailedWithoutStep,
   recordStepCompleted,
   recordStepRunning,
   replaceRunSteps,
@@ -64,12 +65,9 @@ export async function POST(req: Request) {
         return jsonError("missing confirmed plan", 400);
       }
       plan = parsePlannerJson(JSON.stringify(body.plan));
+      const steps = buildExecutionCommands(plan, ask).map(({ id, label }) => ({ stepId: id, label }));
       runId = createAnalysisRun(db, { companyName: plan.company.name, ask, plan });
-      replaceRunSteps(
-        db,
-        runId,
-        buildExecutionCommands(plan, ask).map(({ id, label }) => ({ stepId: id, label })),
-      );
+      replaceRunSteps(db, runId, steps);
     }
   } catch (e) {
     db.close();
@@ -89,7 +87,11 @@ export async function POST(req: Request) {
           } else if (ev.kind === "step-complete") {
             recordStepCompleted(db, runId, ev.id);
           } else if (ev.kind === "error") {
-            markRunFailed(db, runId, ev.stepId ?? startAtStepId ?? "unknown", ev.message);
+            if (ev.stepId ?? startAtStepId) {
+              markRunFailed(db, runId, (ev.stepId ?? startAtStepId)!, ev.message);
+            } else {
+              markRunFailedWithoutStep(db, runId, ev.message);
+            }
             controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "failed" } satisfies AgentEvent)));
           } else if (ev.kind === "done") {
             markRunCompleted(db, runId);
@@ -101,6 +103,8 @@ export async function POST(req: Request) {
         const message = (e as Error).message;
         if (startAtStepId) {
           markRunFailed(db, runId, startAtStepId, message);
+        } else {
+          markRunFailedWithoutStep(db, runId, message);
         }
         controller.enqueue(encoder.encode(sse({ kind: "run", runId, status: "failed" } satisfies AgentEvent)));
         controller.enqueue(encoder.encode(sse({ kind: "error", message })));

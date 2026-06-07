@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     getAnalysisRun: vi.fn(),
     markRunCompleted: vi.fn(),
     markRunFailed: vi.fn(),
+    markRunFailedWithoutStep: vi.fn(),
     recordStepCompleted: vi.fn(),
     recordStepRunning: vi.fn(),
     replaceRunSteps: vi.fn(),
@@ -51,6 +52,7 @@ vi.mock("../../src/db/analysis-runs.js", () => ({
   getAnalysisRun: mocks.getAnalysisRun,
   markRunCompleted: mocks.markRunCompleted,
   markRunFailed: mocks.markRunFailed,
+  markRunFailedWithoutStep: mocks.markRunFailedWithoutStep,
   recordStepCompleted: mocks.recordStepCompleted,
   recordStepRunning: mocks.recordStepRunning,
   replaceRunSteps: mocks.replaceRunSteps,
@@ -204,6 +206,33 @@ describe("/api/run", () => {
       { kind: "error", message: "duplicate executor step id: verify:ASIANPAINT" },
     ]);
     expect(mocks.markRunFailed).not.toHaveBeenCalled();
+    expect(mocks.markRunFailedWithoutStep).toHaveBeenCalledWith(
+      mocks.db,
+      42,
+      "duplicate executor step id: verify:ASIANPAINT",
+    );
+  });
+
+  it("records run-level failure when executor error events omit a step id", async () => {
+    emitted = [{ kind: "error", message: "executor failed before step attribution" }];
+
+    const res = await POST(new Request("http://localhost/api/run", {
+      method: "POST",
+      body: JSON.stringify({ plan, ask: "compare margins" }),
+    }));
+
+    expect(res.status).toBe(200);
+    expect(await readFrames(res)).toEqual([
+      { kind: "run", runId: 42, status: "running" },
+      { kind: "run", runId: 42, status: "failed" },
+      emitted[0],
+    ]);
+    expect(mocks.markRunFailed).not.toHaveBeenCalled();
+    expect(mocks.markRunFailedWithoutStep).toHaveBeenCalledWith(
+      mocks.db,
+      42,
+      "executor failed before step attribution",
+    );
   });
 
   it("rejects requests without a confirmed plan", async () => {
