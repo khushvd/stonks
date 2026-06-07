@@ -17,17 +17,30 @@ export interface RunSummary {
   peers: string[];
 }
 
-export interface RunDetail extends RunSummary {
+export interface RunDetail {
+  id: number;
+  companyName: string;
+  ask: string;
+  status: RunStatus;
+  failedStepId: string | null;
+  errorMessage: string | null;
   plan: AnalystPlan;
+}
+
+export interface StreamResult {
+  runId: number | null;
+  completed: boolean;
+  failed: boolean;
 }
 
 export async function readAgentEventStream(
   stream: ReadableStream<Uint8Array>,
   handlers: { onEvent: (event: AgentEvent) => void; onRunId?: (runId: number) => void },
-): Promise<void> {
+): Promise<StreamResult> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buf = "";
+  const result: StreamResult = { runId: null, completed: false, failed: false };
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -40,9 +53,17 @@ export async function readAgentEventStream(
       if (!line) continue;
       const ev = JSON.parse(line.slice(6)) as AgentEvent;
       handlers.onEvent(ev);
-      if (ev.kind === "run") handlers.onRunId?.(ev.runId);
+      if (ev.kind === "run") {
+        result.runId = ev.runId;
+        result.completed = ev.status === "completed" || result.completed;
+        result.failed = ev.status === "failed" || result.failed;
+        handlers.onRunId?.(ev.runId);
+      }
+      if (ev.kind === "done" && ev.ok) result.completed = true;
+      if (ev.kind === "error") result.failed = true;
     }
   }
+  return result;
 }
 
 export function ControlRail({ onComplete }: { onComplete: (company: string, peers: string[], plan: AnalystPlan) => void }) {
@@ -146,17 +167,17 @@ export function ControlRail({ onComplete }: { onComplete: (company: string, peer
   async function retryRun(runId: number) {
     setEvents([]);
     setRunning(true);
-    setActiveRunId(runId);
     try {
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ runId, resume: true }),
       });
-      await readAgentEventStream(await assertRunStream(res), {
+      const streamResult = await readAgentEventStream(await assertRunStream(res), {
         onEvent: (ev) => setEvents((prev) => [...prev, ev]),
         onRunId: setActiveRunId,
       });
+      if (!streamResult.completed || streamResult.failed) return;
       try {
         const detail = await fetchRunDetail(runId);
         setCompany(detail.companyName);
