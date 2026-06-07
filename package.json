@@ -15,7 +15,8 @@
     "extract": "tsx src/cli/extract.ts",
     "pdf-text": "tsx src/cli/pdf-text.ts",
     "db": "tsx src/cli/db.ts",
-    "verify": "tsx src/cli/verify.ts"
+    "verify": "tsx src/cli/verify.ts",
+    "commentary-trends": "tsx src/cli/commentary-trends.ts"
   },
   "keywords": [],
   "author": "",
