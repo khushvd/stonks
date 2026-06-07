@@ -110,4 +110,17 @@ export function migrate(db: Database.Database): void {
     }
     db.pragma("user_version = 1");
   }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS commentary_trends (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id        INTEGER NOT NULL REFERENCES companies(id),
+      period            TEXT NOT NULL,
+      summary           TEXT NOT NULL,
+      tone              TEXT NOT NULL CHECK(tone IN ('cautious','neutral','optimistic','confident')),
+      key_topics        TEXT NOT NULL,
+      contradiction_note TEXT,
+      created_at        TEXT DEFAULT (datetime('now'))
+    );
+  `);
 }
