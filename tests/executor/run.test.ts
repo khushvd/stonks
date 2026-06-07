@@ -80,6 +80,21 @@ describe("buildExecutionCommands", () => {
       "Summarize database",
     ]);
   });
+
+  it("rejects duplicate deterministic step ids", () => {
+    const duplicatePeerPlan: AnalystPlan = {
+      ...plan,
+      peers: [
+        plan.peers[0],
+        plan.peers[0],
+        { name: "Asian Paints", slug: "ASIANPAINT", reason: "duplicate main company" },
+      ],
+    };
+
+    expect(() => buildExecutionCommands(duplicatePeerPlan, "compare margins")).toThrow(
+      "duplicate executor step id: scrape:peer:BERGEPAINT",
+    );
+  });
 });
 
 describe("runExecution", () => {
@@ -138,5 +153,28 @@ describe("runExecution", () => {
       stepId: "ingest:main",
       message: "Ingest Asian Paints into NotebookLM failed with code 1: NotebookLM auth expired",
     });
+  });
+
+  it("rejects blank and unknown resume step ids without spawning commands", async () => {
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const spawn: Spawner = (cmd, args) => {
+      calls.push({ cmd, args });
+      return {
+        stdout: (async function* () {})(),
+        exitCode: Promise.resolve(0),
+        stderr: Promise.resolve(""),
+      };
+    };
+
+    const blankEvents = await collect(runExecution(plan, "compare margins", spawn, undefined, { startAtStepId: "" }));
+    const unknownEvents = await collect(
+      runExecution(plan, "compare margins", spawn, undefined, { startAtStepId: "verify:UNKNOWN" }),
+    );
+
+    expect(calls).toEqual([]);
+    expect(blankEvents).toEqual([{ kind: "error", stepId: "", message: "Unknown resume step: " }]);
+    expect(unknownEvents).toEqual([
+      { kind: "error", stepId: "verify:UNKNOWN", message: "Unknown resume step: verify:UNKNOWN" },
+    ]);
   });
 });

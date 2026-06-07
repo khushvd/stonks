@@ -42,6 +42,16 @@ function scrapeCommand(company: { name: string; slug: string }, label: string, i
   };
 }
 
+function assertUniqueStepIds(commands: ExecutionCommand[]): void {
+  const seen = new Set<string>();
+  for (const command of commands) {
+    if (seen.has(command.id)) {
+      throw new Error(`duplicate executor step id: ${command.id}`);
+    }
+    seen.add(command.id);
+  }
+}
+
 export function buildExecutionCommands(plan: AnalystPlan, ask: string): ExecutionCommand[] {
   const peerCommands = plan.peers.map((peer: PeerPlan) =>
     scrapeCommand(peer, `Scrape peer ${peer.name}`, `scrape:peer:${peer.slug}`),
@@ -61,7 +71,7 @@ export function buildExecutionCommands(plan: AnalystPlan, ask: string): Executio
     args: ["verify", company.name],
   }));
 
-  return [
+  const commands = [
     scrapeCommand(plan.company, `Scrape ${plan.company.name}`, "scrape:main"),
     ...peerCommands,
     { id: "ingest:main", label: `Ingest ${plan.company.name} into NotebookLM`, cmd: "pnpm", args: ["ingest", plan.company.name] },
@@ -71,6 +81,8 @@ export function buildExecutionCommands(plan: AnalystPlan, ask: string): Executio
     ...verifyCommands,
     { id: "db:summary", label: "Summarize database", cmd: "pnpm", args: ["db", "summary"] },
   ];
+  assertUniqueStepIds(commands);
+  return commands;
 }
 
 async function drain(stdout: AsyncIterable<string>): Promise<void> {
@@ -92,7 +104,9 @@ export async function* runExecution(
 
   try {
     const commands = buildExecutionCommands(plan, ask);
-    const startIndex = options.startAtStepId ? commands.findIndex((command) => command.id === options.startAtStepId) : 0;
+    const startIndex = options.startAtStepId !== undefined
+      ? commands.findIndex((command) => command.id === options.startAtStepId)
+      : 0;
     if (startIndex === -1) {
       yield { kind: "error", stepId: options.startAtStepId, message: `Unknown resume step: ${options.startAtStepId}` };
       return;
