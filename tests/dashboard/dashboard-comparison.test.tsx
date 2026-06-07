@@ -13,6 +13,7 @@ const data: DashboardData = {
   brief: null,
   trends: [],
   industryKpis: [],
+  commentaryTrends: [],
 };
 
 const comparison: ComparisonData = {

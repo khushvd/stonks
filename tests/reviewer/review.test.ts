@@ -50,6 +50,7 @@ const dashboard: DashboardData = {
   },
   trends: [],
   industryKpis: [],
+  commentaryTrends: [],
 };
 
 describe("reviewDashboard", () => {
