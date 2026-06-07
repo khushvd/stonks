@@ -138,15 +138,17 @@ export function ControlRail({ onComplete }: { onComplete: (company: string, peer
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: confirmedPlan, ask }),
       });
-      await readAgentEventStream(await assertRunStream(res), {
+      const streamResult = await readAgentEventStream(await assertRunStream(res), {
         onEvent: (ev) => setEvents((prev) => [...prev, ev]),
         onRunId: setActiveRunId,
       });
+      if (streamResult.completed && !streamResult.failed) {
+        onComplete(confirmedPlan.company.name, confirmedPlan.peers.map((p) => p.name), confirmedPlan);
+      }
     } catch (e) {
       setEvents((prev) => [...prev, { kind: "error", message: (e as Error).message }]);
     } finally {
       setRunning(false);
-      onComplete(confirmedPlan.company.name, confirmedPlan.peers.map((p) => p.name), confirmedPlan);
       await refreshRuns();
     }
   }
