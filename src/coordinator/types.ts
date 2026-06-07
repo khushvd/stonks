@@ -1,6 +1,7 @@
 // One parsed unit of coordinator progress, surfaced to the browser over SSE.
 // Legacy coordinator parsers still emit tool/text, while the deterministic executor emits step ids.
 export type AgentEvent =
+  | { kind: "run"; runId: number; status: "running" | "failed" | "completed" } // persisted run lifecycle metadata
   | { kind: "step"; label: string; id?: string } // a pipeline step started (pnpm scrape/ingest/extract/verify/db)
   | { kind: "step-complete"; label: string; id: string } // a deterministic executor step completed
   | { kind: "tool"; name: string; summary: string } // any other tool use
