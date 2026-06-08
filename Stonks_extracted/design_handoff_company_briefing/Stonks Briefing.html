@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stonks — Company Briefing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #17140f;
+    --panel: #201c15;
+    --panel-2: #28231a;
+    --border: #36301f;
+    --text: #ece5d8;
+    --text-2: #cbc2b1;
+    --muted: #948b78;
+    --faint: #6c6452;
+    --accent: #e8b04b;
+    --teal: #5cb9b1;
+    --violet: #b09be0;
+    --up: #7bb25e;
+    --bad: #e0664f;
+    --warn: #e0903a;
+    --grid: rgba(255,255,255,0.055);
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --rail-w: 208px;
+    --maxw: 1080px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+  /* document-level scroll with gentle snap */
+  html { scroll-snap-type: y proximity; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  html::-webkit-scrollbar { width: 10px; }
+  html::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+  /* top progress */
+  .progress-bar { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); z-index: 60;
+    width: 0%; transition: width .15s linear; box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent); }
+
+  /* chapter rail */
+  .rail { position: fixed; top: 0; left: 0; width: var(--rail-w); height: 100vh; z-index: 50;
+    border-right: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 70%, transparent);
+    backdrop-filter: blur(8px); display: flex; flex-direction: column; padding: 22px 0; }
+  .rail-brand { padding: 0 22px 18px; display: flex; align-items: center; gap: 9px; }
+  .rail-dot { width: 9px; height: 9px; border-radius: 2px; background: var(--accent); }
+  .rail-brand b { font-family: var(--mono); font-size: 13px; letter-spacing: .04em; }
+  .rail-brand span { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .rail-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; flex: 1; overflow-y: auto; }
+  .rail-item { display: flex; align-items: center; gap: 11px; padding: 9px 22px; cursor: pointer;
+    border: none; background: none; color: var(--muted); text-align: left; width: 100%;
+    font-family: var(--sans); font-size: 13px; transition: color .2s, background .2s; position: relative; }
+  .rail-item:hover { color: var(--text-2); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .rail-item .num { font-family: var(--mono); font-size: 11px; color: var(--faint); width: 18px; transition: color .2s; }
+  .rail-item.active { color: var(--text); }
+  .rail-item.active .num { color: var(--accent); }
+  .rail-item.active::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px;
+    background: var(--accent); border-radius: 2px; }
+  .rail-item .flag-dot { width: 6px; height: 6px; border-radius: 50%; margin-left: auto; }
+  .rail-foot { padding: 14px 22px 0; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 10px; color: var(--faint); line-height: 1.6; }
+
+  /* chapters */
+  .chapters { margin-left: var(--rail-w); }
+  .chapter { min-height: 100vh; scroll-snap-align: start; display: flex; flex-direction: column;
+    justify-content: center; padding: 72px clamp(28px, 6vw, 88px); position: relative; }
+  .chapter + .chapter { border-top: 1px solid var(--border); }
+  .chapter.alt { background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 60%); }
+  .chapter-inner { width: 100%; max-width: var(--maxw); margin: 0 auto; }
+  .watermark { position: absolute; right: clamp(20px, 4vw, 60px); top: 56px; font-family: var(--mono);
+    font-size: clamp(80px, 12vw, 150px); font-weight: 700; line-height: 1; color: var(--panel-2);
+    z-index: 0; pointer-events: none; letter-spacing: -.04em; user-select: none; }
+  .chapter-inner > * { position: relative; z-index: 1; }
+  /* charts use explicit px width; let them scale down so they never prop grid tracks open */
+  .chapter svg { max-width: 100%; }
+  .chapter .card { min-width: 0; }
+
+  .ch-head { display: flex; flex-direction: column; gap: 9px; margin-bottom: 26px; }
+  .ch-index { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--faint); }
+  .ch-title { font-size: clamp(28px, 3.4vw, 42px); font-weight: 600; letter-spacing: -0.02em; margin: 0; line-height: 1.05; }
+  .ch-dek { font-size: 15px; color: var(--muted); margin: 0; max-width: 60ch; line-height: 1.5; }
+
+  /* expand control + detail drawer */
+  .expand-btn { margin-top: 22px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--border); color: var(--text-2); border-radius: 8px;
+    padding: 9px 15px; font-family: var(--mono); font-size: 12px; letter-spacing: .02em; transition: all .2s; }
+  .expand-btn:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
+  .expand-btn .chev { transition: transform .35s ease; color: var(--accent); }
+  .expand-btn.open .chev { transform: rotate(180deg); }
+  .detail { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s cubic-bezier(.4,0,.2,1); margin-top: 14px; }
+  .detail.open { grid-template-rows: 1fr; }
+  .detail > .detail-inner { overflow: hidden; min-height: 0; }
+  .detail-pad { padding-top: 8px; }
+
+  /* entrance animation — only when JS marks the container ready */
+  .briefing.anim .chapter-inner > * { opacity: 0; transform: translateY(22px); transition: opacity .65s ease, transform .65s ease; }
+  .briefing.anim .chapter.in-view .chapter-inner > * { opacity: 1; transform: none; }
+  .briefing.anim .chapter.in-view .chapter-inner > *:nth-child(2) { transition-delay: .07s; }
+  .briefing.anim .chapter.in-view .chapter-inner > *:nth-child(3) { transition-delay: .14s; }
+  .briefing.anim .chapter.in-view .chapter-inner > *:nth-child(4) { transition-delay: .21s; }
+  @media (prefers-reduced-motion: reduce) {
+    .briefing { scroll-behavior: auto; }
+    .briefing.anim .chapter-inner > * { opacity: 1; transform: none; transition: none; }
+  }
+
+  /* scroll hint */
+  .scroll-hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 11px; color: var(--faint); display: flex; flex-direction: column;
+    align-items: center; gap: 7px; animation: bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 0%,100%{ transform: translate(-50%,0);} 50%{ transform: translate(-50%,6px);} }
+  @media (prefers-reduced-motion: reduce) { .scroll-hint { animation: none; } }
+
+  /* generic bits */
+  .tile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat-tile { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat-key { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .stat-val { font-size: 26px; font-weight: 600; font-family: var(--mono); letter-spacing: -.02em; margin: 6px 0 4px; }
+  .stat-sub { color: var(--faint); font-size: 11px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+  .data-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
+  .data-table th { text-align: right; padding: 8px 12px; color: var(--muted); font-weight: 500; font-size: 11px; border-bottom: 1px solid var(--border); }
+  .data-table th:first-child, .data-table td:first-child { text-align: left; }
+  .data-table td { text-align: right; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text-2); }
+  .data-table tr:last-child td { border-bottom: none; }
+
+  @media (max-width: 900px) {
+    :root { --rail-w: 0px; }
+    .rail { transform: translateX(-100%); }
+    .chapters { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script type="text/babel" src="charts.jsx"></script>
+<script type="text/babel" src="ui.jsx"></script>
+<script type="text/babel" src="briefing-sections.jsx"></script>
+<script type="text/babel" src="briefing-sections2.jsx"></script>
+<script type="text/babel" src="briefing.jsx"></script>
+
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById('root')).render(<BriefingApp />);
+</script>
+</body>
+</html>
