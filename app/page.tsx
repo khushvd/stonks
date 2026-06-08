@@ -1,23 +1,32 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { ComparisonData } from "../src/dashboard/comparison.js";
 import type { DashboardData } from "../src/dashboard/data.js";
 import type { AnalystPlan } from "../src/planner/plan.js";
 import { reviewDashboard, type ReviewerFinding } from "../src/reviewer/review.js";
 import { ControlRail } from "./components/ControlRail.js";
 import { Dashboard } from "./components/Dashboard.js";
+import BriefingApp from "./components/briefing/BriefingApp";
+import { toBriefingData } from "./components/briefing/adapter";
 
 export default function Page() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [comparison, setComparison] = useState<ComparisonData | null>(null);
   const [reviewerFindings, setReviewerFindings] = useState<ReviewerFinding[]>([]);
+  // TODO(remove before merge): QA-only mock route
+  const [mockMode, setMockMode] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("briefing") === "mock") setMockMode(true);
+    }
+  }, []);
 
   const refresh = useCallback(async (company: string, peers: string[] = [], plan?: AnalystPlan) => {
     const params = new URLSearchParams({ company });
     if (peers.length > 0) params.set("peers", peers.join(","));
     const res = await fetch(`/api/dashboard?${params.toString()}`);
-    // Clear on a failed fetch (e.g. 404 from a typo) so a stale company's data is never shown as
-    // if it belonged to the one just requested. The empty-state copy renders instead.
     if (!res.ok) {
       setData(null);
       setComparison(null);
@@ -29,6 +38,21 @@ export default function Page() {
     setComparison(body.comparison ?? null);
     setReviewerFindings(plan ? reviewDashboard(plan, body, body.comparison ?? null) : []);
   }, []);
+
+  const handleExit = useCallback(() => {
+    setData(null);
+    setComparison(null);
+    setReviewerFindings([]);
+    setMockMode(false);
+  }, []);
+
+  if (mockMode) {
+    return <BriefingApp data={toBriefingData()} onExit={handleExit} />;
+  }
+
+  if (data) {
+    return <BriefingApp data={toBriefingData(data, comparison)} onExit={handleExit} />;
+  }
 
   return (
     <main style={{ display: "grid", gridTemplateColumns: "minmax(300px, 360px) 1fr", height: "100vh" }}>

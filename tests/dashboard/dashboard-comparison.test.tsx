@@ -33,11 +33,16 @@ const comparison: ComparisonData = {
 };
 
 describe("Dashboard comparison rendering", () => {
-  it("renders the sector KPI matrix when comparison data is supplied", () => {
+  // Dashboard is now a thin wrapper: it renders only the empty state (data=null).
+  // When data is non-null, page.tsx renders BriefingApp full-screen instead;
+  // Dashboard returns null so it contributes no HTML in that branch.
+  it("renders nothing when data is supplied (BriefingApp owns the post-run view)", () => {
     const html = renderToStaticMarkup(<Dashboard data={data} comparison={comparison} />);
-    expect(html.indexOf("Sector KPI Matrix")).toBeLessThan(html.indexOf("Couldn&#x27;t synthesize a brief"));
-    expect(html.indexOf("Sector KPI Matrix")).toBeLessThan(html.indexOf("Evidence"));
-    expect(html).toContain("Sector KPI Matrix");
-    expect(html).toContain("Berger Paints");
+    expect(html).toBe("");
+  });
+
+  it("renders empty-state copy when data is null", () => {
+    const html = renderToStaticMarkup(<Dashboard data={null} />);
+    expect(html).toContain("Run an analysis");
   });
 });
