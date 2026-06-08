@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import type { ComparisonData } from "../src/dashboard/comparison.js";
 import type { DashboardData } from "../src/dashboard/data.js";
 import type { AnalystPlan } from "../src/planner/plan.js";
@@ -13,15 +13,6 @@ export default function Page() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [comparison, setComparison] = useState<ComparisonData | null>(null);
   const [reviewerFindings, setReviewerFindings] = useState<ReviewerFinding[]>([]);
-  // TODO(remove before merge): QA-only mock route
-  const [mockMode, setMockMode] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("briefing") === "mock") setMockMode(true);
-    }
-  }, []);
 
   const refresh = useCallback(async (company: string, peers: string[] = [], plan?: AnalystPlan) => {
     const params = new URLSearchParams({ company });
@@ -43,12 +34,7 @@ export default function Page() {
     setData(null);
     setComparison(null);
     setReviewerFindings([]);
-    setMockMode(false);
   }, []);
-
-  if (mockMode) {
-    return <BriefingApp data={toBriefingData()} onExit={handleExit} />;
-  }
 
   if (data) {
     return <BriefingApp data={toBriefingData(data, comparison)} onExit={handleExit} />;

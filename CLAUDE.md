@@ -94,9 +94,11 @@ providers. The live LLM path is the planner. If adding/fixing Codex fallback, ad
   `src/db`, NO raw SQL — now includes `BriefView` with resolved source links + trust badges),
   `sector-kpis.ts` and `comparison.ts` build the expected sector KPI matrix and peer notebook coverage
 - `app/` — Next.js App Router. `api/{plan,dashboard,pdf,run}/route.ts` (all `runtime="nodejs"`; `plan`
-  is the bounded planner, `run` is deterministic SSE execution), `components/*.tsx` (**BriefPanel** is
-  the headline; MetricsTable/IntegrityTile/MarginChart demoted to Evidence; ComparisonPanel and
-  ReviewerPanel inline), `page.tsx` (two-step plan/confirm/run). `scripts/stonks.command` = the launcher.
+  is the bounded planner, `run` is deterministic SSE execution), `components/*.tsx` (ControlRail,
+  Dashboard for the plan/confirm/run flow; `components/briefing/` for the BriefingApp), `page.tsx`
+  (two-step plan/confirm/run). Dashboard shows the cited research brief as a 7-chapter scrollytelling
+  "Company Briefing" (`app/components/briefing/BriefingApp.tsx`) — driven by mock data for now; real-data
+  wiring is the open seam in `adapter.ts`. `scripts/stonks.command` = the launcher.
 
 ## Build phases
 
@@ -130,6 +132,11 @@ providers. The live LLM path is the planner. If adding/fixing Codex fallback, ad
      expected sector KPI packs from each company notebook; expected sector KPIs always render as rows,
      including `Missing` cells (e.g. hotel RevPAR), with peer notebook coverage cards and a probe-deeper
      affordance. Spec: `docs/superpowers/specs/2026-06-06-peer-notebook-briefing-pack-design.md`.
+   - **Scrollytelling Company Briefing dashboard: DONE (2026-06-09, mock-data).** 7-chapter answer-first
+     briefing (Overview → Margins → Financials → Peers → Management → Risks → Provenance) with fixed rail,
+     scroll-spy, keyboard nav, per-chapter detail drawers, hand-rolled SVG charts, and warm-gold IBM Plex
+     theme app-wide. Real-data adapter seam is `app/components/briefing/adapter.ts` (`toBriefingData()`) —
+     wire-up deferred to follow-up plan.
    - **Provider fallback tech debt (OPEN, 2026-06-06):** Codex fallback was mistakenly added to legacy
      `src/coordinator/run.ts`, but the live bounded app uses `src/planner/run.ts`. Fix provider fallback
      at the planner boundary before relying on `COORDINATOR_PROVIDER=codex` or any replacement env.
