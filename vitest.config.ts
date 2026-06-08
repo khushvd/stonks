@@ -3,6 +3,6 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   oxc: { jsx: { runtime: "automatic" } },
   test: {
-    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "app/**/*.test.ts", "app/**/*.test.tsx"],
   },
 });
