@@ -8,7 +8,9 @@ import { cellInfo, fmtNum } from "../format";
 import { sortPeers } from "../peers-sort";
 
 export default function Peers({ data }: { data: BriefingData }) {
-  const subject = data.company.ticker;
+  // Matrix columns are keyed by whatever the adapter used as column keys (peer names for real
+  // data, tickers for the mock). The subject is always the first column.
+  const subject = data.peers[0] ?? data.company.ticker;
 
   function PeerRankBars() {
     const row = data.matrix.find((m) => m.kpi === "EBITDA margin");
