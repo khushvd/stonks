@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mapCompany, stubAbout, stubBottomLine } from "../adapter-company";
-import type { Company, Filing, IntegritySummary } from "../../../src/types.js";
+import type { Company, Filing, IntegritySummary } from "../../../../src/types.js";
 
 const company: Company = { id: 1, name: "Indian Hotels Co.", ticker: "INDHOTEL", industry: "Hotels" };
 const filings: Filing[] = [

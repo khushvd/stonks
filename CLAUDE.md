@@ -97,8 +97,8 @@ providers. The live LLM path is the planner. If adding/fixing Codex fallback, ad
   is the bounded planner, `run` is deterministic SSE execution), `components/*.tsx` (ControlRail,
   Dashboard for the plan/confirm/run flow; `components/briefing/` for the BriefingApp), `page.tsx`
   (two-step plan/confirm/run). Dashboard shows the cited research brief as a 7-chapter scrollytelling
-  "Company Briefing" (`app/components/briefing/BriefingApp.tsx`) — driven by mock data for now; real-data
-  wiring is the open seam in `adapter.ts`. `scripts/stonks.command` = the launcher.
+  "Company Briefing" (`app/components/briefing/BriefingApp.tsx`) — driven by real `getDashboard()` +
+  `getComparisonData()` data via `adapter.ts` (`toBriefingData()`). `scripts/stonks.command` = the launcher.
 
 ## Build phases
 
@@ -137,6 +137,11 @@ providers. The live LLM path is the planner. If adding/fixing Codex fallback, ad
      scroll-spy, keyboard nav, per-chapter detail drawers, hand-rolled SVG charts, and warm-gold IBM Plex
      theme app-wide. Real-data adapter seam is `app/components/briefing/adapter.ts` (`toBriefingData()`) —
      wire-up deferred to follow-up plan.
+   - **Briefing real-data adapter: DONE (2026-06-09).** `app/components/briefing/adapter.ts` now maps live
+     `getDashboard()` + `getComparisonData()` output into `BriefingData` via eight unit-tested pure helpers
+     (`adapter-{util,quarters,stats,matrix,brief,commentary,sources,company}.ts`). Known stubs pending backend
+     synthesis: company `about`, `bottomLine` triage verdict, per-peer sparkline history (single-point), source
+     page anchors (default 1). 285 tests green; TSC clean; build passes.
    - **Provider fallback tech debt (OPEN, 2026-06-06):** Codex fallback was mistakenly added to legacy
      `src/coordinator/run.ts`, but the live bounded app uses `src/planner/run.ts`. Fix provider fallback
      at the planner boundary before relying on `COORDINATOR_PROVIDER=codex` or any replacement env.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mapSources } from "../adapter-sources";
-import type { Filing } from "../../../src/types.js";
+import type { Filing } from "../../../../src/types.js";
 
 const f = (id: number, type: Filing["type"], period: string | null): Filing => ({
   id, company_id: 1, type, period, source_url: null, local_path: null, notebooklm_source_id: null,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { toBriefingData } from "../adapter";
-import type { DashboardData } from "../../../src/dashboard/data.js";
-import type { ComparisonData } from "../../../src/dashboard/comparison.js";
+import type { DashboardData } from "../../../../src/dashboard/data.js";
+import type { ComparisonData } from "../../../../src/dashboard/comparison.js";
 
 const okBadge = { label: "VERIFIED", tone: "ok", color: "#0f0" } as const;
 

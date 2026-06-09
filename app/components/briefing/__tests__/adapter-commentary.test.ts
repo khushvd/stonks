@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mapCommentary } from "../adapter-commentary";
-import type { CommentaryTrend } from "../../../src/db/commentary-trends.js";
+import type { CommentaryTrend } from "../../../../src/db/commentary-trends.js";
 
 const trends: CommentaryTrend[] = [
   { period: "Q3 FY25", summary: "Record quarter.", tone: "confident", keyTopics: ["record", "pipeline"], contradictionNote: null },

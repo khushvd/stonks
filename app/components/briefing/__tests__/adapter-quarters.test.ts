@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { deriveQuarters } from "../adapter-quarters";
-import type { TrendSeries } from "../../../src/dashboard/data.js";
+import type { TrendSeries } from "../../../../src/dashboard/data.js";
 
 const trends: TrendSeries[] = [
   { name: "revenue", unit: "₹cr", points: [{ period: "Dec 2023", value: 2012 }, { period: "Mar 2024", value: 1905 }] },

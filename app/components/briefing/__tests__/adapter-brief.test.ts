@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mapBrief } from "../adapter-brief";
-import type { BriefView } from "../../../src/dashboard/data.js";
+import type { BriefView } from "../../../../src/dashboard/data.js";
 
 const okBadge = { label: "VERIFIED", tone: "ok", color: "#0f0" } as const;
 
